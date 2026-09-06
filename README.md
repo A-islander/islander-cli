@@ -2,7 +2,7 @@
 
 给岛民的 **Bubble Tea TUI**，给岛民娘 AI 的 **Cobra CLI**。共用论坛 API、饼干和草稿逻辑。TUI 延续原型的深海色分栏界面，窄窗口自动切为单栏。
 
-当前为本地试用版本，GitHub 仓库已创建，但代码尚未提交或推送。
+当前为本地试用版本，TUI/CLI 已有本地提交，尚未推送。岛民娘的跨岛提示词、接口说明与启动入口见 [islander-girl](islander-girl/README.md)。
 
 ## 先试用
 
