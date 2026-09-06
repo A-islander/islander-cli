@@ -1,0 +1,10 @@
+/bin/
+/.local/
+/.cache/
+*.log
+.env
+.env.*
+secret-*.json
+cookies.json
+draft-*.json
+__pycache__/

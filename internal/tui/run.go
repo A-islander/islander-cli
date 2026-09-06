@@ -1,0 +1,47 @@
+package tui
+
+import (
+	tea "charm.land/bubbletea/v2"
+	"fmt"
+	"github.com/A-islander/islander-cli/internal/forum"
+	"github.com/A-islander/islander-cli/internal/local"
+	"github.com/charmbracelet/x/term"
+	"os"
+)
+
+type Options struct {
+	ForumURL, UserURL, Images, Cookie string
+	Store                             *local.Store
+	Demo                              bool
+}
+
+func Run(o Options) error {
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
+		return fmt.Errorf("TUI 需要交互终端；程序读取请使用 --output json 命令")
+	}
+	m := newModel()
+	m.opts = o
+	m.store = o.Store
+	if !o.Demo {
+		m.boardNames = []string{"全部"}
+		m.threads = nil
+		m.refilter()
+		m.notice = "正在连接岛民岛…"
+		m.client, _ = forum.New(o.ForumURL, o.UserURL, "")
+		m.busy = true
+		if err := m.setIdentity(o.Cookie); err != nil {
+			m.notice = err.Error()
+		}
+	}
+	_, err := tea.NewProgram(m).Run()
+	return err
+}
+func (m *model) setIdentity(alias string) error {
+	who, token, err := m.store.Identity(alias)
+	if err != nil {
+		return err
+	}
+	m.identity = who
+	m.client, err = forum.New(m.opts.ForumURL, m.opts.UserURL, token)
+	return err
+}

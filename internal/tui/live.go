@@ -1,0 +1,254 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/A-islander/islander-cli/internal/forum"
+)
+
+type resultMsg struct {
+	ID    int
+	Kind  string
+	Value any
+	Err   error
+}
+type initialResult struct {
+	Boards []forum.Board
+	Page   forum.Page
+}
+type threadResult struct {
+	Root   forum.Post
+	Page   forum.Page
+	Target int
+}
+type menuItem struct{ Label, Action, Value string }
+
+func (m model) initialLoad() tea.Cmd {
+	c := m.client
+	if c == nil {
+		c, _ = forum.New(m.opts.ForumURL, m.opts.UserURL, "")
+	}
+	return func() tea.Msg {
+		b, e := c.Boards(context.Background())
+		if e != nil {
+			return resultMsg{Kind: "initial", Err: e}
+		}
+		p, e := c.List(context.Background(), "timeline", 0, 1)
+		return resultMsg{Kind: "initial", Value: initialResult{b, p}, Err: e}
+	}
+}
+func (m *model) launch(kind string, fn func(context.Context, *forum.Client) (any, error)) tea.Cmd {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	m.cancel = cancel
+	m.requestID++
+	id := m.requestID
+	c := m.client
+	m.busy = true
+	return func() tea.Msg { defer cancel(); v, e := fn(ctx, c); return resultMsg{id, kind, v, e} }
+}
+func (m model) environmentLabel() string {
+	if m.opts.Demo {
+		return "离线体验"
+	}
+	if m.opts.ForumURL != forum.ForumURL {
+		return "自定义服务"
+	}
+	return "岛民岛"
+}
+func (m model) identityLabel() string {
+	if m.identity.Alias == "" {
+		return "访客 · i 导入饼干"
+	}
+	return m.identity.Alias + " / " + m.identity.Name
+}
+func (m model) replyCount(t thread) int {
+	if p, ok := m.raw[t.id]; ok {
+		return p.ReplyCount
+	}
+	return len(t.posts) - 1
+}
+func (m model) boardLabel(id int) string {
+	for _, b := range m.apiBoards {
+		if b.ID == id {
+			return forum.Clean(b.Name)
+		}
+	}
+	return "板块 " + strconv.Itoa(id)
+}
+func (m *model) displayPost(p forum.Post) post {
+	m.raw[p.ID] = p
+	t := time.Unix(p.Time, 0).Format("01-02 15:04")
+	if p.Time > 1e12 {
+		t = time.UnixMilli(p.Time).Format("01-02 15:04")
+	}
+	quote := 0
+	if len(p.Quotes) > 0 {
+		quote = p.Quotes[0]
+	} else if ids := forum.QuoteIDs(p.Body); len(ids) > 0 {
+		quote = ids[0]
+	}
+	att := ""
+	if items := forum.MediaItems(p.MediaURL); len(items) > 0 {
+		att = fmt.Sprintf("%d 个附件 · a 打开附件列表", len(items))
+	}
+	return post{p.ID, forum.Clean(p.Name), t, forum.Clean(p.Body), quote, att, p.Status == 2}
+}
+func (m *model) displayThread(p forum.Post) thread {
+	title := forum.Clean(p.Title)
+	if title == "" {
+		title = strings.ReplaceAll(forum.Clean(p.Body), "\n", " ")
+		if p.FollowID > 0 {
+			title = "↳ 回复 No." + strconv.Itoa(p.FollowID) + " · " + title
+		}
+	}
+	if p.Status == 2 {
+		title = "[已删除] " + title
+	}
+	if p.Status == 1 {
+		title = "[SAGE] " + title
+	}
+	return thread{p.ID, m.boardLabel(p.BoardID), title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
+}
+func (m *model) applyPage(p forum.Page) {
+	m.inlineQuotes = map[string][]inlineQuote{}
+	m.quoteOffsets = map[string]int{}
+	m.listError = ""
+	m.jumpSource = nil
+	m.threads = nil
+	m.page = p.Page
+	m.total = p.Count
+	for _, v := range p.List {
+		m.threads = append(m.threads, m.displayThread(v))
+	}
+	m.refilter()
+	m.notice = fmt.Sprintf("第 %d 页 · %d 条内容 · b 板块 / c 发串 / i 饼干", p.Page, p.Count)
+	if m.kind == "mine" {
+		m.notice = fmt.Sprintf("我的内容 · 饼干 %s · 发串与回复（含删除记录）· 第 %d 页 / %d 条", m.identity.Alias, p.Page, p.Count)
+	}
+}
+
+func (m *model) openMine() tea.Cmd {
+	if m.opts.Demo {
+		m.notice = "离线原型没有个人内容；请连接论坛或运行本地试用岛"
+		return nil
+	}
+	if m.identity.Alias == "" {
+		m.pendingMine = true
+		m.openCookies()
+		m.notice = "选择发帖时使用的饼干，随后打开我的内容"
+		return nil
+	}
+	m.pendingMine = false
+	m.savePosition()
+	m.modal, m.filter = "", ""
+	m.kind, m.board = "mine", 0
+	m.threads, m.jumpSource = nil, nil
+	m.page, m.total = 1, 0
+	m.refilter()
+	return m.loadList(1)
+}
+
+func (m *model) leaveReading() {
+	m.savePosition()
+	m.reading = false
+	m.activeQuote = ""
+	if m.jumpSource != nil && len(m.visible) > 0 {
+		m.threads[m.visible[m.selected]] = *m.jumpSource
+		m.jumpSource = nil
+		m.activePost = 0
+		m.refreshReader(true)
+	}
+	m.refreshReader(false)
+}
+func (m *model) loadList(page int) tea.Cmd {
+	m.listError = ""
+	kind, id := m.kind, 0
+	if m.board > 0 && m.board <= len(m.apiBoards) {
+		id = m.apiBoards[m.board-1].ID
+	}
+	m.reading = false
+	return m.launch("list", func(ctx context.Context, c *forum.Client) (any, error) { return c.List(ctx, kind, id, page) })
+}
+func (m *model) loadThread(id, page, target int) tea.Cmd {
+	if t := m.current(); m.reading && t != nil && t.id == id && m.pages[t.id].Page == page {
+		m.savePosition()
+	}
+	return m.launch("thread", func(ctx context.Context, c *forum.Client) (any, error) {
+		p, e := c.Post(ctx, id)
+		if e != nil {
+			return nil, e
+		}
+		if p.FollowID > 0 {
+			target = p.ID
+			p, e = c.Post(ctx, p.FollowID)
+			if e != nil {
+				return nil, e
+			}
+		}
+		if target > 0 {
+			page, e = c.ReplyPage(ctx, p.ID, target)
+			if e != nil {
+				return nil, e
+			}
+		}
+		list, e := c.List(ctx, "thread", p.ID, page)
+		return threadResult{p, list, target}, e
+	})
+}
+func (m *model) applyThread(r threadResult) {
+	t := m.displayThread(r.Root)
+	t.posts = nil
+	for _, p := range r.Page.List {
+		t.posts = append(t.posts, m.displayPost(p))
+	}
+	if len(t.posts) == 0 {
+		t.posts = append(t.posts, m.displayPost(r.Root))
+	}
+	m.pages[t.id] = r.Page
+	if len(m.visible) == 0 {
+		m.threads = append(m.threads, t)
+		m.visible = []int{len(m.threads) - 1}
+		m.selected = 0
+	} else {
+		m.threads[m.visible[m.selected]] = t
+	}
+	m.reading = true
+	m.activePost = 0
+	m.activeQuote = ""
+	m.refreshReader(true)
+	m.syncActivePost()
+	if r.Target > 0 {
+		for i, p := range t.posts {
+			if p.id == r.Target {
+				m.movePost(i - m.activePost)
+			}
+		}
+	}
+	m.notice = fmt.Sprintf("串 No.%d · 第 %d/%d 页 · [ ] 翻页 · r 回复 / R 引用回复", t.id, r.Page.Page, max(1, (r.Page.Count+19)/20))
+}
+func (m *model) activeRaw() (forum.Post, bool) {
+	selected, ok := m.selectedPost()
+	if !ok {
+		return forum.Post{}, false
+	}
+	p, ok := m.raw[selected.id]
+	return p, ok
+}
+func (m *model) openBoards() {
+	m.menu = []menuItem{{"全部 · 最新回复", "board", "0"}}
+	for i, b := range m.apiBoards {
+		m.menu = append(m.menu, menuItem{forum.Clean(b.Name), "board", strconv.Itoa(i + 1)})
+	}
+	m.menu = append(m.menu, menuItem{"SAGE 内容", "sage", ""}, menuItem{"我的内容 · 含删除记录", "mine", ""})
+	m.menuIndex = 0
+	m.modal = "menu"
+	m.returnModal = "板块与时间线"
+}
