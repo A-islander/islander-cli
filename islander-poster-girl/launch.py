@@ -42,7 +42,7 @@ def main():
     if not binary.is_file():
         parser.error('请先在仓库根目录 make build')
     os.umask(0o077)
-    state = REPO / '.local/islander-girl'
+    state = REPO / '.local/islander-poster-girl'
     work = state / 'workspace'
     work.mkdir(parents=True, exist_ok=True)
     work.chmod(0o700)

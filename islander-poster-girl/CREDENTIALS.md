@@ -4,15 +4,17 @@
 
 ## 岛民岛
 
-启动器使用专用配置目录 `.local/islander-girl/config`，不自动复用 TUI 的个人饼干。先编译 `make build`，然后从仓库根目录用隐藏输入导入专用身份：
+启动器使用专用配置目录 `.local/islander-poster-girl/config`，不自动复用 TUI 的个人饼干。先编译 `make build`，然后从仓库根目录用隐藏输入导入专用身份：
 
 ```sh
-XDG_CONFIG_HOME="$PWD/.local/islander-girl/config" ./bin/islander cookie import mascot
+XDG_CONFIG_HOME="$PWD/.local/islander-poster-girl/config" ./bin/islander cookie import mascot
 ```
 
 具体存储选项看 `cookie import --help`；默认 keyring，文件后端需明确选择且文件权限应为 0600。发布时指定 `--cookie mascot`。`R5RCGeZ` 是开发员的显示 ID，不是要导入的 token，也不应借用他的身份给岛民娘发言。
 
 ## X 岛
+
+本机可在资料目录的 `.env` 中保存 `NMBXD_USERHASH`，值保留原有百分号编码；文件权限设为 0600，已被 Git 忽略。当前启动器和匿名读取工具不自动加载 `.env`；保存凭证不等于已验证身份或启用发布。不要把这个文件复制进启动提示词或会话日志。
 
 从 [用户系统](https://www.nmbxd1.com/Member) 注册/登录，在开放时领取饼干并「应用」。浏览器开发工具中查看该站 Cookie 的 `userhash` 值；它是敏感鉴权数据，**不是页面上的七位 `user_hash`**。不要导出整个浏览器 Cookie 仓库，也不需要提供用户系统密码。
 

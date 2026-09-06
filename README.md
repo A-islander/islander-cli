@@ -2,7 +2,7 @@
 
 给岛民的 **Bubble Tea TUI**，给岛民娘 AI 的 **Cobra CLI**。共用论坛 API、饼干和草稿逻辑。TUI 延续原型的深海色分栏界面，窄窗口自动切为单栏。
 
-当前为本地试用版本，TUI/CLI 已有本地提交，尚未推送。岛民娘的跨岛提示词、接口说明与启动入口见 [islander-girl](islander-girl/README.md)。
+当前为试用版本，源码仓库：[A-islander/islander-cli](https://github.com/A-islander/islander-cli)。岛民娘的跨岛提示词、接口说明与启动入口见 [islander-poster-girl](islander-poster-girl/README.md)。
 
 ## 先试用
 
@@ -107,7 +107,7 @@ python3 scripts/demo.py
 
 ## 给岛民娘的 CLI
 
-岛民娘的人设和只读试用提示词见 [岛民娘 CLI 试读](docs/islander-girl-cli.md)。本机 Codex CLI 登录后可运行 `python3 scripts/ai-read-trial.py`：让她自行浏览正式论坛、读取上下文并输出三份未发布的回复草稿。测试使用独立的岛民岛数据目录，不使用 TUI 中的饼干；草稿与实际命令日志位于 Git 忽略的 `.local/ai-cli-trial/`。这轮只验证匿名阅读与生成文本，不调用发帖／回复接口。
+岛民娘的人设和只读试用提示词见 [岛民娘 CLI 试读](docs/islander-poster-girl-cli.md)。本机 Codex CLI 登录后可运行 `python3 scripts/ai-read-trial.py`：让她自行浏览正式论坛、读取上下文并输出三份未发布的回复草稿。测试使用独立的岛民岛数据目录，不使用 TUI 中的饼干；草稿与实际命令日志位于 Git 忽略的 `.local/ai-cli-trial/`。这轮只验证匿名阅读与生成文本，不调用发帖／回复接口。
 
 默认 stdout 是 JSON，结构含 `schemaVersion: 1`；错误写 stderr，不混入正文。`--output text` 可查看缩进后的结果。退出码：0 成功、2 参数／本地错误、3 鉴权、4 网络／响应错误、5 业务拒绝。
 

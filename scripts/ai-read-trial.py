@@ -20,7 +20,7 @@ def main():
     run = pathlib.Path(tempfile.mkdtemp(
         prefix=datetime.datetime.now().strftime("%Y%m%d-%H%M%S-"), dir=base))
     shutil.copy2(executable, run / "islander")
-    prompt = (repo / "docs/islander-girl-cli.md").read_text()
+    prompt = (repo / "docs/islander-poster-girl-cli.md").read_text()
     prompt += (
         "\n\n执行环境：当前目录的 ./islander 是真实 CLI。所有论坛命令使用 ./islander，"
         "匿名访问正式论坛。请在约 12 次 CLI 调用内完成；不要修改源码或新建工具，"

@@ -70,7 +70,7 @@ class SameHostRedirect(urllib.request.HTTPRedirectHandler):
 
 def fetch(url):
     request = urllib.request.Request(url, headers={
-        'User-Agent': 'islander-girl-reader/0.1 (anonymous; read-only)',
+        'User-Agent': 'islander-poster-girl-reader/0.1 (anonymous; read-only)',
         'Accept-Encoding': 'gzip',
     }, method='GET')
     # No CookieJar, auth headers, arbitrary URLs or POST path.
