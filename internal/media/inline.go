@@ -15,8 +15,17 @@ import (
 )
 
 // LoadImage uses the same unauthenticated media transport as downloads. Decode
-// limits apply before allocating pixels, and only one bounded image is retained.
+// limits apply before allocating pixels; callers own the bounded decoded image.
 func LoadImage(ctx context.Context, u string) (image.Image, error) {
+	return loadImage(ctx, u, 1600, 1200)
+}
+
+// LoadThumbnail bounds decoded cache entries even when a site has no thumbnail URL.
+func LoadThumbnail(ctx context.Context, u string) (image.Image, error) {
+	return loadImage(ctx, u, 320, 192)
+}
+
+func loadImage(ctx context.Context, u string, maxWidth, maxHeight int) (image.Image, error) {
 	b, err := fetch(ctx, u)
 	if err != nil {
 		return nil, err
@@ -35,7 +44,7 @@ func LoadImage(ctx context.Context, u string) (image.Image, error) {
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
-	scale := min(1.0, min(1600.0/float64(cfg.Width), 1200.0/float64(cfg.Height)))
+	scale := min(1.0, min(float64(maxWidth)/float64(cfg.Width), float64(maxHeight)/float64(cfg.Height)))
 	if scale < 1 {
 		w, h := max(1, int(float64(cfg.Width)*scale)), max(1, int(float64(cfg.Height)*scale))
 		out := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -58,6 +67,11 @@ func FitCells(img image.Image, maxCols, maxRows int) (int, int) {
 }
 
 func Blocks(img image.Image, cols, rows int) string {
+	return BlocksRegion(img, cols, rows, 0, 0, cols, rows)
+}
+
+// BlocksRegion samples only the visible cells of a larger scaled image.
+func BlocksRegion(img image.Image, cols, rows, left, top, width, height int) string {
 	var out strings.Builder
 	b := img.Bounds()
 	// Composite transparent pixels on the same background as the TUI.
@@ -65,8 +79,8 @@ func Blocks(img image.Image, cols, rows int) string {
 		r, g, b, a := c.RGBA()
 		return (r + 0x10*(65535-a)/255) >> 8, (g + 0x1f*(65535-a)/255) >> 8, (b + 0x28*(65535-a)/255) >> 8
 	}
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
+	for y := top; y < top+height; y++ {
+		for x := left; x < left+width; x++ {
 			a := img.At(b.Min.X+x*b.Dx()/cols, b.Min.Y+y*2*b.Dy()/(rows*2))
 			z := img.At(b.Min.X+x*b.Dx()/cols, b.Min.Y+(y*2+1)*b.Dy()/(rows*2))
 			r, g, bl := rgb(a)
@@ -74,7 +88,7 @@ func Blocks(img image.Image, cols, rows int) string {
 			fmt.Fprintf(&out, "\x1b[38;2;%d;%d;%d;48;2;%d;%d;%dm▀", r, g, bl, rr, gg, bb)
 		}
 		out.WriteString("\x1b[0m")
-		if y+1 < rows {
+		if y+1 < top+height {
 			out.WriteByte('\n')
 		}
 	}
@@ -106,16 +120,21 @@ func KittyUpload(img image.Image, id, cols, rows int) (string, error) {
 	return out.String(), nil
 }
 func KittyCells(id, cols, rows int) string {
+	return KittyCellsRegion(id, 0, 0, cols, rows)
+}
+
+// Keep the original row/column diacritics when clipping a zoomed placement.
+func KittyCellsRegion(id, left, top, cols, rows int) string {
 	var out strings.Builder
-	for y := 0; y < rows; y++ {
+	for y := top; y < top+rows; y++ {
 		fmt.Fprintf(&out, "\x1b[38;2;%d;%d;%dm", (id>>16)&255, (id>>8)&255, id&255)
-		for x := 0; x < cols; x++ {
+		for x := left; x < left+cols; x++ {
 			out.WriteRune(kitty.Placeholder)
 			out.WriteRune(kitty.Diacritic(y))
 			out.WriteRune(kitty.Diacritic(x))
 		}
 		out.WriteString("\x1b[0m")
-		if y+1 < rows {
+		if y+1 < top+rows {
 			out.WriteByte('\n')
 		}
 	}
@@ -125,4 +144,21 @@ func KittyDelete(id int) string { return fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b
 func KittyQuery(id int) string  { return fmt.Sprintf("\x1b_Gi=%d,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\", id) }
 func KittyResize(id, cols, rows int) string {
 	return fmt.Sprintf("\x1b_Ga=p,U=1,i=%d,p=1,c=%d,r=%d,q=2\x1b\\", id, cols, rows)
+}
+
+// KittyTransport wraps each APC separately: a multi-chunk upload must not become
+// one unbounded tmux DCS. All inner ESC bytes must be doubled, including ST.
+func KittyTransport(data string, tmux bool) string {
+	if !tmux {
+		return data
+	}
+	var out strings.Builder
+	for _, part := range strings.SplitAfter(data, "\x1b\\") {
+		if part != "" {
+			out.WriteString("\x1bPtmux;")
+			out.WriteString(strings.ReplaceAll(part, "\x1b", "\x1b\x1b"))
+			out.WriteString("\x1b\\")
+		}
+	}
+	return out.String()
 }

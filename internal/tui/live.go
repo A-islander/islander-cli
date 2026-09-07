@@ -106,7 +106,7 @@ func (m *model) displayPost(p forum.Post) post {
 	}
 	att := ""
 	if items := p.Media(); len(items) > 0 {
-		att = fmt.Sprintf("%d 个附件 · a 打开附件列表", len(items))
+		att = fmt.Sprintf("%d 个附件 · a 加载附件", len(items))
 	}
 	return post{p.ID, forum.Clean(p.Name), t, forum.Clean(p.Body), quote, att, p.Status == 2}
 }

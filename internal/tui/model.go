@@ -15,6 +15,10 @@ import (
 )
 
 type model struct {
+	imageTerminal                               imageTerminal
+	imageZoom                                   int
+	inlineImages                                inlineImageState
+	imageSlots                                  []inlineImageSlot
 	stateReady                                  bool
 	stateError                                  string
 	stateTickID, draftTickID                    uint64
@@ -171,6 +175,7 @@ func (m *model) refreshReader(restore bool) {
 	offset := m.reader.YOffset()
 	m.postLines = nil
 	m.readerItems = nil
+	m.imageSlots = nil
 	t := m.current()
 	if t == nil {
 		m.reader.SetContent("")

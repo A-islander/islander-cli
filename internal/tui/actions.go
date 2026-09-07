@@ -887,6 +887,9 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			for _, a := range p.Media() {
 				m.menu = append(m.menu, menuItem{a.Type + " · " + a.URL, "attachment", a.URL})
 			}
+			if !m.reading {
+				m.menu = m.previewAttachmentMenu()
+			}
 			if len(m.menu) > 0 {
 				m.modal = "menu"
 				m.returnModal = fmt.Sprintf("No.%d · 附件", p.ID)
@@ -1008,7 +1011,7 @@ func (m model) extendedDialog() (string, bool) {
 			if m.capabilities().Publish {
 				replyHelp = "c 发串 · r 回复 · R 引用回复 · d 草稿\nF3 颜文字 · F2 编辑历史\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n我的内容及管理操作尚未接入。"
 			}
-			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 加载附件 · +/- 小图大小\n[ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
 		}
 	default:
 		return "", false

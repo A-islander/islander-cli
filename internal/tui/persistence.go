@@ -107,7 +107,7 @@ func (m *model) flushPersistence() {
 
 // Disk writes happen on the model goroutine. Timers only deliver identifiers,
 // so a late timer cannot write an old site's snapshot or resurrect a draft.
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) updatePersistent(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
 	case tea.BlurMsg:
 		m.flushPersistence()

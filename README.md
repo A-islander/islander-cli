@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.4**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.5**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.4
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.5
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.4-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.4-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.4-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.4-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.4-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.4-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.5-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.5-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.5-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.5-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.5-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.5-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.4-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.5-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.4-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.4-linux-x86_64.AppImage
-./islander-v0.0.4-linux-x86_64.AppImage
-./islander-v0.0.4-linux-x86_64.AppImage --version
-./islander-v0.0.4-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.5-linux-x86_64.AppImage
+./islander-v0.0.5-linux-x86_64.AppImage
+./islander-v0.0.5-linux-x86_64.AppImage --version
+./islander-v0.0.5-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -226,15 +226,23 @@ v0.0.4 支持连续浏览：读到已加载内容底部继续按 `j/↓`、滚�
 
 ## 附件
 
+v0.0.5 新增自动小图：终端支持图片时，三个岛的串预览、正文及展开的引用均显示小图。串预览把首张小图放在正文旁边，默认保留五条回复的文字；进入串后多图依次排列。`+` / `-` 调整小图大小（`=` 也可放大），已加载的图片复用缓存。小图靠近阅读位置时加载，优先使用站点缩略图；加载前后预留相同高度，避免正文跳动。
+
+终端未确认支持图片时，串预览与正文只显示 `a 加载附件`，不会自动下载图片或显示字符图。按 `a` 后才加载附件，必要时在附件窗口降级字符预览。串预览中的 `a` 包含主楼和已展示回复的附件，左右键切换；进入串后仍只查看选中楼层或引用的附件。`--images blocks` 也只在手动打开附件时显示字符图。
+
 从 v0.0.3 起，按 `a` 直接在 TUI 内打开选中帖子或引用的首张附件，无须先进入附件列表。窗口内可用：
 
-- `←` / `→`（或 `h` / `l`）：前后切换附件。
+- `+` / `=` 放大、`-` 缩小原图；`0` 恢复适应窗口（100%）。缩放复用已加载图片。
+- `Shift + 方向键`：移动放大后的画面；`↑` / `↓` 也可上下移动。
+- `←` / `→`（或 `h` / `l`）：前后切换附件，新图片从适应窗口开始。
 - `Esc`：直接返回原帖，保留选中楼层和阅读位置。
 - `r` / `Enter`：重新加载；`b`：切换为字符预览。
 - `o`：通过系统默认应用打开，适合视频或其他文件。
 - `s`：下载到 `~/Downloads/islander/`，使用新文件名，不覆盖已有文件。
 
-可用 `--images auto|kitty|blocks|off` 手动控制。原图预览支持 Go 解码的 PNG、JPEG 和 GIF 首帧，限制 20 MB／3200 万像素；其他格式可以外部打开。视频、音频不在终端中播放。图片预览在当前 TUI 内异步加载。默认查询终端能力，确认支持后使用 Kitty 图形协议的 Unicode 占位方式显示；未确认支持时自动显示彩色字符预览。切换或关闭图片会取消旧请求并清理对应图片，窗口缩放自动适配。
+可用 `--images auto|kitty|blocks|off` 手动控制。原图预览支持 Go 解码的 PNG、JPEG 和 GIF 首帧，限制 20 MB／3200 万像素；其他格式可以外部打开。视频、音频不在终端中播放。图片预览在当前 TUI 内异步加载。默认查询终端能力，确认支持后使用 Kitty 图形协议的 Unicode 占位方式显示；未确认支持时，仅在按 `a` 打开的附件窗口显示彩色字符预览。切换或关闭图片会取消旧请求并清理对应图片，窗口缩放自动适配。
+
+Ghostty / Kitty 配合 tmux 时，程序会识别外层终端，为当前窗格临时开启图片透传，退出时恢复原设置，不修改 `~/.tmux.conf`。tmux 内采用静默上传，避免等待无法回传的图形确认；其他兼容终端可用 `--images kitty` 指定。未知终端或透传不可用时保持附件文字提示，按 `a` 后再加载。若终端关闭了图片能力或使用嵌套 tmux，可使用 `islander --images blocks tui`。详见 [串内图片与 tmux 规格](docs/specs/inline-images-tmux.md)。
 
 ## 饼干和本地数据
 
@@ -317,20 +325,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.4
+make release VERSION=v0.0.5
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.4 --arch aarch64
+python3 scripts/package.py --version v0.0.5 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.4 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.4 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.5 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.5 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

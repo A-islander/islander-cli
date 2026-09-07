@@ -164,6 +164,7 @@ func (m *model) threadContent(t thread) string {
 			lines = append(lines, "")
 			lines = append(lines, strings.Split(ink(wrapText("▧ "+p.attachment, w), sand), "\n")...)
 		}
+		lines = append(lines, m.inlineImageLines(p, key, w, len(lines))...)
 		if ids := m.quoteIDs(p); len(ids) > 0 {
 			label := fmt.Sprintf("▸ %d 条引用 · v 展开", len(ids))
 			if _, open := m.inlineQuotes[key]; open {
@@ -398,6 +399,9 @@ func (m model) View() tea.View {
 	}
 	if m.width < 80 {
 		help = "b 板块 P 跳页 H 历史 F 收藏 ? 帮助"
+	}
+	if m.inlineCapability() == 1 && len(m.imageSlots) > 0 && (m.reading || m.split()) {
+		help = "+/- 小图  " + help
 	}
 	if !m.reading && m.capabilities().Publish {
 		help = "c 发串  " + help

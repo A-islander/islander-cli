@@ -131,7 +131,7 @@ func previewLines(s string, width, limit int) []string {
 	return lines
 }
 
-func (m model) previewContent(t thread) string {
+func (m *model) previewContent(t thread) string {
 	w := max(1, m.reader.Width()-2)
 	p, ok := m.raw[t.id]
 	if !ok {
@@ -150,12 +150,11 @@ func (m model) previewContent(t thread) string {
 	if root.Status == 2 {
 		body = "[这条内容已被删除]"
 	}
-	for _, line := range previewLines(body, w, 3) {
-		lines = append(lines, ink(line, foam))
-	}
+	lines = m.previewPostBody(lines, root, body, w, 3)
 	if count := len(root.Media()); count > 0 {
-		lines = append(lines, ink(fmt.Sprintf("▧ %d 个附件", count), sand))
+		lines = append(lines, ink(clip(fmt.Sprintf("▧ %d 个附件 · a 加载附件", count), w), sand))
 	}
+
 	if p.FollowID > 0 || p.ParentUnknown {
 		return strings.Join(lines, "\n")
 	}
@@ -194,16 +193,14 @@ func (m model) previewContent(t thread) string {
 	for _, reply := range replies {
 		header := fmt.Sprintf("No.%d · %s", reply.ID, forum.Clean(reply.Name))
 		if len(reply.Media()) > 0 {
-			header += " · ▧"
+			header += " · ▧ a 加载附件"
 		}
 		lines = append(lines, ink(clip(header, w), sand))
 		body := reply.Body
 		if reply.Status == 2 {
 			body = "[这条回复已被删除]"
 		}
-		for _, line := range previewLines(body, w, limit) {
-			lines = append(lines, ink(line, foam))
-		}
+		lines = m.previewPostBody(lines, reply, body, w, limit)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -213,4 +210,67 @@ func (m model) previewFallback(t thread, w int) string {
 		return ""
 	}
 	return bodyText(strings.Join(previewLines(t.posts[0].body, w, 3), "\n"), w)
+}
+
+// Place a compact thumbnail beside the body. Image rows share the existing text
+// budget, so five short replies remain visible at the normal terminal size.
+func (m *model) previewPostBody(lines []string, p forum.Post, body string, width, rows int) []string {
+	var picture []string
+	pictureWidth := max(4, min(18+m.imageZoom*4, width/2))
+	pictureRows := max(1, rows+m.imageZoom*2)
+	if p.Status != 2 && width >= 24 {
+		picture = m.inlineMediaLines(p.Media(), fmt.Sprintf("preview/%d", p.ID), pictureWidth, pictureRows, len(lines), 1, false)
+	}
+	textWidth := width
+	if len(picture) > 0 {
+		textWidth -= pictureWidth + 2
+	}
+	text := previewLines(body, textWidth, rows)
+	count := max(len(text), len(picture))
+	for i := 0; i < count; i++ {
+		line := ""
+		if i < len(text) {
+			line = ink(text[i], foam)
+		}
+		if i < len(picture) {
+			line = rectangle(line, textWidth, 1) + "  " + picture[i]
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// The preview may contain attachments from both the root and its replies.
+// Keep a usable a shortcut even when only a reply has attachments.
+func (m model) previewAttachmentMenu() []menuItem {
+	t := m.current()
+	if t == nil {
+		return nil
+	}
+	root, ok := m.raw[t.id]
+	if !ok {
+		return nil
+	}
+	result, loaded := m.previews[t.id]
+	posts := []forum.Post{root}
+	if loaded && result.Err == nil && root.FollowID == 0 && !root.ParentUnknown {
+		if result.Page.Root != nil {
+			posts[0] = *result.Page.Root
+		}
+		for _, p := range result.Page.List {
+			if p.ID != posts[0].ID && len(posts) < 6 {
+				posts = append(posts, p)
+			}
+		}
+	}
+	var items []menuItem
+	for _, p := range posts {
+		if p.Status == 2 {
+			continue
+		}
+		for _, a := range p.Media() {
+			items = append(items, menuItem{fmt.Sprintf("No.%d · %s · %s", p.ID, a.Type, a.URL), "attachment", a.URL})
+		}
+	}
+	return items
 }
