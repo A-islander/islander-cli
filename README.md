@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.2**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.3**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.2
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.3
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.2-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.2-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.2-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.2-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.2-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.2-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.3-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.3-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.3-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.3-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.3-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.3-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.2-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.3-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.2-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.2-linux-x86_64.AppImage
-./islander-v0.0.2-linux-x86_64.AppImage
-./islander-v0.0.2-linux-x86_64.AppImage --version
-./islander-v0.0.2-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.3-linux-x86_64.AppImage
+./islander-v0.0.3-linux-x86_64.AppImage
+./islander-v0.0.3-linux-x86_64.AppImage --version
+./islander-v0.0.3-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -109,7 +109,7 @@ islander --site bog tui
 
 宽屏列表右侧自动显示主楼及第一页最多五条回复摘要；选串停留片刻后加载，快速移动时取消旧请求。长内容和更多回复按 `Enter` 阅读完整串，预览不改变已保存的阅读位置。
 
-TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`v` 原位展开引用，`a` 查看附件。每次切站从时间线第一页加载，各站点的饼干、草稿和阅读缓存分开。默认仍为岛民岛。
+TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛并恢复每岛阅读位置；首次启动及普通 CLI 默认仍为岛民岛。
 
 CLI 使用同一个 `--site` 参数，输出保留原有 `schemaVersion` / `data`，另附 `site` 来源字段：
 
@@ -124,7 +124,7 @@ islander --site bog thread get 1423209 --page 2
 islander --site bog post get 1526630
 ```
 
-外站目前支持浏览，发帖、我的内容、SAGE、删除恢复和领取饼干尚未接入。`site info` 返回已实现的能力；不支持的 CLI 操作返回 `unsupported`，TUI 隐藏相应菜单。下文发串与管理说明适用于岛民岛。
+v0.0.2 的外站能力为浏览。v0.0.3 已接入 X 岛 / BOG 的回复、引用回复和回复图片；新主串、我的内容、SAGE、删除恢复和领取饼干尚未接入。`site info` 返回已实现的能力；不支持的 CLI 操作返回 `unsupported`，TUI 隐藏相应菜单。下文发串与管理说明适用于岛民岛。
 
 X 岛使用 JSON API；BOG 的板块和串分页解析公开网页，引用读取 JSON。总数未知时 `count=-1`，楼层偏移未知时 `offset=-1`；按 `hasMore` 判断能否继续。BOG 板块 `key` 为原始名称，`id` 是稳定的本地导航编号，不能用于 BOG 的发帖 API。`--board` 可直接使用名称。X 岛的 `post get` 返回 `parentUnknown=true` 表示引用接口没有父串信息；`thread get` 和 TUI 的编号跳转应提供主串编号。
 
@@ -149,7 +149,33 @@ X 输入 `userhash` 的值，保留百分号编码；导入时只读检查受限
 
 附件单个最多 20 MB，正文最多 8192 字节，标题最多 128 字节。上传后发布失败会保留草稿及上传结果。网络失败不自动重试；先在「我的内容」核对结果，再决定是否重新提交。
 
+## X 岛 / BOG 回复
+
+从 v0.0.3 起，先按 `g` 切岛、`i` 导入或选择该岛饼干，然后打开主串：`r` 回复，`R` 引用选中帖子；`Ctrl+A` 选择图片，`Ctrl+P` 预览站点、身份、目标和正文，Enter 确认提交。外站新主串仍不支持，`site info` 用独立的 `reply: true / publish: false` 表示。
+
+CLI 示例（替换为你要回复的真实主串和引用编号）：
+
+```sh
+islander --site x --cookie daily reply create --thread 12345678 --quote 12345679 --body-file reply.txt --dry-run
+islander --site bog --cookie daily reply create --thread 1234567 --body-file reply.txt --attach picture.png --dry-run
+# 检查输出后，使用完全相同的参数，把 --dry-run 换为 --confirm <返回的确认码>
+```
+
+X 回复先读取目标网页的最新表单与校验字段，再提交正文和最多一张本地图片；默认 JSON API 对应的提交网页为 `https://www.nmbxd1.com/`。自定义 endpoint 的提交只访问该实例。BOG 使用表单回复，图片先上传，成功上传记录随草稿保留，回复失败后手动重试可复用。
+
+客户端目前把正文限制为 8192 字节、图片单张 20 MB，支持 JPEG/PNG/GIF/BMP；这不是外站允许的全部额度。X 最多一张，BOG 客户端最多九张，实际还受站点图片权限与数量限制；标题同时受客户端和网页限制（BOG 最多 50 个字符），X 保留网页默认水印选项。
+
+验证码需在原站网页完成，TUI/CLI 会保留草稿。遇到频率限制、锁串或饼干失效会报错；响应不明、超时或重定向不当作成功，不自动重发，先在原串核对。此功能通过真实网页 GET 和本地模拟提交验证，尚未用真实饼干向外站提交回复。实现边界见 [外站回复 spec](docs/specs/external-replies.md)。
+
 ## 常用按键
+
+v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问的岛及阅读位置，`--site` 可显式覆盖；普通 CLI 的默认站点仍是岛民岛。
+
+按 **`H` 查看当前岛 / 当前身份的浏览历史**，`/` 筛选，Enter 继续阅读，`x` 删除。菜单可清空或暂停记录；每份历史最多 500 条，保留 90 天。编辑时自动保存，**`F2` 查看和恢复最近 20 个编辑快照**。历史和草稿分别保存，清空历史不会删草稿。附件仍是原文件路径或已上传链接，不是文件备份。
+
+**`*` 收藏 / 取消收藏当前主串，`F` 打开当前岛 / 当前身份的收藏列表**，`/` 筛选，Enter 续读，`x` 确认取消收藏。收藏在列表和正文标题中标为 `★`，永久保留，不随浏览历史过期。从普通列表、收藏、历史或主串编号重新打开都会恢复上次页码、选中楼层和楼内滚动位置。普通串的进度随历史保留 90 天 / 500 条；已收藏串的进度随收藏保留。清空历史会保留收藏项、清除其阅读进度；暂停历史也暂停自动更新收藏进度。收藏只存在本地，不改变论坛服务端状态。
+
+数据根目录为 Linux 的 `~/.config/islander/`（支持 `XDG_CONFIG_HOME`）、macOS 的 `~/Library/Application Support/islander/`、Windows 的 `%AppData%/islander/`，也可用 `--data-dir` 指定。根目录的 `preferences.json` 保存当前岛，各站哈希目录的 `browsing.json` 保存导航、历史和收藏，`draft-*.json` 保存草稿与快照。完整规则见 [状态持久化 spec](docs/specs/persistent-forum-state.md)。
 
 顶部常驻 **`m 我的内容`** 按钮，可鼠标点击或按 `m` 打开当前饼干的发串与回复列表。访客会先进入饼干选择，选择／导入后继续打开。页面显示饼干别名；选中回复后按 `Enter` 定位原串，`Esc` 返回原来的列表位置。`[` / `]` 翻页，`i` 切换饼干。
 
@@ -170,6 +196,8 @@ X 输入 `userhash` 的值，保留百分号编码；导入时只读检查受限
 | `:` | 按主楼或回复编号定位 |
 | `[` / `]` | 前一页／后一页，页码从 1 开始 |
 | `b` | 全部、各板块、SAGE、我的内容 |
+| `H` / `F` | 当前岛与身份的历史 / 收藏（v0.0.3 起） |
+| `*` | 收藏 / 取消收藏当前主串（v0.0.3 起） |
 | `m` / 点击顶部「我的内容」 | 直接打开当前饼干的发串与回复列表 |
 | `1–9` | 顶部前九个板块入口 |
 | `/` | 筛选当前页标题、摘要和编号 |
@@ -190,10 +218,10 @@ X 输入 `userhash` 的值，保留百分号编码；导入时只读检查受限
 
 ## 附件
 
-按 `a` 打开当前帖子或引用的附件列表，选中附件后按 `Enter`，直接在 TUI 内显示图片。窗口内可用：
+从 v0.0.3 起，按 `a` 直接在 TUI 内打开选中帖子或引用的首张附件，无须先进入附件列表。窗口内可用：
 
 - `←` / `→`（或 `h` / `l`）：前后切换附件。
-- `Esc`：返回附件列表，再按一次返回原帖，保留阅读位置。
+- `Esc`：直接返回原帖，保留选中楼层和阅读位置。
 - `r` / `Enter`：重新加载；`b`：切换为字符预览。
 - `o`：通过系统默认应用打开，适合视频或其他文件。
 - `s`：下载到 `~/Downloads/islander/`，使用新文件名，不覆盖已有文件。
@@ -281,20 +309,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.2
+make release VERSION=v0.0.3
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.2 --arch aarch64
+python3 scripts/package.py --version v0.0.3 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.2 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.2 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.3 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.3 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

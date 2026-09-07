@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -32,14 +31,22 @@ func (m *model) openPostActions() {
 	}
 	if !m.capabilities().Publish {
 		m.menu = []menuItem{{"a · 查看附件", "post-action", "a"}, {"v · 原位展开 / 收起引用", "post-action", "v"}}
+		if m.capabilities().Reply {
+			m.menu = append([]menuItem{{"R · 引用这条帖子并回复", "post-action", "R"}, {"r · 回复当前串", "post-action", "r"}}, m.menu...)
+		}
 	}
+	label := "* · 收藏当前主串"
+	if t := m.current(); t != nil && m.isFavorite(t.id) {
+		label = "* · 取消收藏当前主串"
+	}
+	m.menu = append(m.menu, menuItem{label, "post-action", "*"}, menuItem{"F · 打开收藏", "post-action", "F"})
 	m.returnModal = fmt.Sprintf("No.%d · 帖子操作", p.ID)
 	m.menuIndex = 0
 	m.modal = "menu"
 }
 
 func (m *model) beginCompose(reply, quote bool) tea.Cmd {
-	if !m.capabilities().Publish {
+	if !m.capabilities().CanPublish(reply) {
 		m.notice = "当前站点暂未接入发帖；请使用站点网页"
 		return nil
 	}
@@ -154,7 +161,7 @@ func (m *model) inputDialog(kind, placeholder string) tea.Cmd {
 }
 func (m *model) preview() {
 	m.syncDraft()
-	if e := m.draft.Validate(); e != nil {
+	if e := forum.ValidateDraft(m.client, m.draft); e != nil {
 		m.notice = e.Error()
 		return
 	}
@@ -166,7 +173,7 @@ func (m *model) preview() {
 	if m.draft.ThreadID > 0 {
 		target = fmt.Sprintf("回复串：No.%d", m.draft.ThreadID)
 	}
-	content := "饼干：" + m.identityLabel() + "\n" + target + "\n标题：" + forum.Clean(m.draft.Title) + "\n\n" + forum.Clean(m.draft.Body)
+	content := "站点：" + m.environmentLabel() + "\n饼干：" + m.identityLabel() + "\n" + target + "\n标题：" + forum.Clean(m.draft.Title) + "\n\n" + forum.Clean(m.draft.Body)
 	if len(m.draft.Files) > 0 {
 		content += "\n\n确认后上传：\n" + strings.Join(m.draft.Files, "\n")
 	}
@@ -186,11 +193,55 @@ func (m *model) selectMenu() tea.Cmd {
 	switch item.Action {
 	case "site":
 		return m.switchSite(item.Value)
+	case "history", "favorite":
+		entries := m.historyEntries
+		if item.Action == "favorite" {
+			entries = m.favoriteEntries
+		}
+		id, _ := strconv.Atoi(item.Value)
+		for _, entry := range entries {
+			if entry.ThreadID == id {
+				if len(m.apiBoards) == 0 {
+					n := entry.Navigation
+					m.pendingRestore = &n
+					return m.initialLoad()
+				}
+				return m.startRestore(entry.Navigation)
+			}
+		}
+	case "history-toggle":
+		b, e := m.store.Browsing(m.identity.Alias)
+		if e == nil {
+			e = m.store.SetHistoryDisabled(m.identity.Alias, !b.HistoryDisabled)
+		}
+		if e != nil {
+			m.stateError = e.Error()
+		}
+		m.openHistory("")
+	case "history-clear":
+		m.modal = "confirm"
+		m.confirmAction = "clear-history"
+		m.notice = "清空当前岛 / 当前身份的浏览历史？收藏和草稿将保留，收藏的阅读位置将清除。"
+	case "draft-edit":
+		i, e := strconv.Atoi(item.Value)
+		if e == nil && i >= 0 && i < len(m.draftEdits) {
+			d := m.draftEdits[i]
+			if d.Cookie != m.identity.Alias || d.ID != m.draft.ID {
+				m.stateError = "草稿身份已变化"
+				return nil
+			}
+			m.draft = d
+			if err := m.store.SaveDraft(&m.draft); err != nil {
+				m.stateError = err.Error()
+			}
+			return m.editDraft()
+		}
 	case "post-action":
 		next, cmd, _ := m.extendedUpdate(tea.KeyPressMsg{Code: []rune(item.Value)[0], Text: item.Value})
 		*m = next.(model)
 		return cmd
 	case "board":
+		m.pendingRestore = nil
 		m.savePosition()
 		m.board, _ = strconv.Atoi(item.Value)
 		m.kind = "timeline"
@@ -202,6 +253,7 @@ func (m *model) selectMenu() tea.Cmd {
 	case "mine":
 		return m.openMine()
 	case "sage":
+		m.pendingRestore = nil
 		m.board = 0
 		m.kind = item.Action
 		m.filter = ""
@@ -230,6 +282,9 @@ func (m *model) selectMenu() tea.Cmd {
 			return m.openMine()
 		}
 		m.pendingMine = false
+		if m.pendingRestore != nil {
+			return m.startRestore(*m.pendingRestore)
+		}
 		return m.loadList(1)
 	case "import":
 		return m.inputDialog("alias", "给饼干起一个英文别名，例如 daily")
@@ -251,6 +306,7 @@ func (m *model) selectMenu() tea.Cmd {
 			}
 		}
 	case "attachment":
+		m.attachmentDirect = false
 		return m.openAttachment()
 	case "link":
 		return m.launch("media", func(_ context.Context, _ forum.Backend) (any, error) {
@@ -263,6 +319,25 @@ func (m *model) selectMenu() tea.Cmd {
 func (m *model) confirm() tea.Cmd {
 	action, id := m.confirmAction, m.confirmID
 	s := m.store
+	if action == "clear-history" || action == "remove-history" {
+		target := 0
+		if action == "remove-history" {
+			target, _ = strconv.Atoi(m.menu[m.menuIndex].Value)
+		}
+		if err := s.DeleteHistory(m.identity.Alias, target); err != nil {
+			m.stateError = err.Error()
+		}
+		m.openHistory("")
+		return nil
+	}
+	if action == "remove-favorite" {
+		target, _ := strconv.Atoi(m.menu[m.menuIndex].Value)
+		if err := s.RemoveFavorite(m.identity.Alias, target); err != nil {
+			m.stateError = err.Error()
+		}
+		m.openFavorites("")
+		return nil
+	}
 	if action == "discard" {
 		m.modal = ""
 		m.draft = forum.Draft{}
@@ -349,6 +424,12 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.busy = false
 		if r.Err != nil {
+			if m.pendingRestore != nil && (r.Kind == "list" || r.Kind == "resume-thread") {
+				m.pendingRestore = nil
+				m.stateReady = false
+				m.notice = "无法恢复上次位置：" + forum.Clean(r.Err.Error())
+				return *m, nil, true
+			}
 			if d, ok := r.Value.(forum.Draft); ok {
 				m.draft = d
 			}
@@ -371,10 +452,18 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 				m.boardNames = append(m.boardNames, forum.Clean(b.Name))
 			}
 			m.applyPage(v.Page)
+			if m.pendingRestore != nil {
+				return *m, m.startRestore(*m.pendingRestore), true
+			}
 		case "list":
 			m.applyPage(r.Value.(forum.Page))
+			if m.pendingRestore != nil {
+				return *m, m.resumeAfterList(), true
+			}
 		case "thread":
 			m.applyThread(r.Value.(threadResult))
+		case "resume-thread":
+			m.applyRestoredThread(r.Value.(threadResult))
 		case "inline-quote":
 			m.applyInlineQuotes(r.Value.(inlineQuoteResult))
 		case "publish":
@@ -412,6 +501,9 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			if m.pendingMine && m.identity.Alias != "" {
 				return *m, m.openMine(), true
 			}
+			if m.pendingRestore != nil {
+				return *m, m.startRestore(*m.pendingRestore), true
+			}
 			m.openCookies()
 			return *m, m.loadList(1), true
 		case "registered":
@@ -447,13 +539,20 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	}
 	k := keymsg.String()
 	if m.busy {
-		if k == "g" && m.modal == "" {
+		if (k == "g" || k == "H" || k == "F") && m.modal == "" {
 			if m.cancel != nil {
 				m.cancel()
 			}
 			m.requestID++
 			m.busy = false
-			m.openSites()
+			m.pendingRestore = nil
+			if k == "H" {
+				m.openHistory("")
+			} else if k == "F" {
+				m.openFavorites("")
+			} else {
+				m.openSites()
+			}
 			return *m, nil, true
 		}
 		if (k == "esc" || k == "q" || k == "ctrl+c") && m.modal != "publish" && m.modal != "confirm" && m.modal != "token" && m.modal != "register-alias" {
@@ -463,6 +562,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.requestID++
 			m.busy = false
 			m.notice = "已取消读取"
+			m.pendingRestore = nil
 			if k == "q" || k == "ctrl+c" {
 				return *m, tea.Quit, true
 			}
@@ -504,7 +604,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.preview()
 			return *m, nil, true
 		case "ctrl+a":
-			m.syncDraft()
+			if err := m.saveDraft(); err != nil {
+				m.stateError = err.Error()
+				return *m, nil, true
+			}
 			return *m, m.openFileBrowser(), true
 		case "ctrl+x":
 			m.draft.Files = nil
@@ -570,7 +673,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		case "x":
 			if len(m.menu) > 0 {
 				item := m.menu[m.menuIndex]
-				if item.Action == "cookie" || item.Action == "draft" {
+				if item.Action == "cookie" || item.Action == "draft" || item.Action == "history" || item.Action == "favorite" {
 					m.modal = "confirm"
 					m.confirmAction = "remove-" + item.Action
 					m.notice = "确认移除：" + item.Label
@@ -659,7 +762,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			saved := *t
 			m.jumpSource = &saved
 		}
-		return *m, m.loadThread(id, 1, 0), true
+		return *m, m.openThread(id), true
 	}
 	if m.modal != "" {
 		return *m, nil, false
@@ -668,6 +771,15 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return *m, nil, false
 	}
 	switch k {
+	case "F":
+		m.openFavorites("")
+		return *m, nil, true
+	case "*":
+		m.toggleFavorite()
+		return *m, nil, true
+	case "H":
+		m.openHistory("")
+		return *m, nil, true
 	case "g":
 		m.openSites()
 		return *m, nil, true
@@ -681,9 +793,8 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return *m, nil, true
 	case "t":
 		m.reading = false
-		sort.SliceStable(m.visible, func(i, j int) bool {
-			return m.raw[m.threads[m.visible[i]].id].Time > m.raw[m.threads[m.visible[j]].id].Time
-		})
+		m.newest = true
+		m.sortNewest()
 		m.selected = 0
 		m.listTop = 0
 		m.refreshReader(true)
@@ -721,7 +832,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 				saved := *t
 				m.jumpSource = &saved
 			}
-			return *m, m.loadThread(t.id, max(1, m.pages[t.id].Page), 0), true
+			return *m, m.openThread(t.id), true
 		}
 		return *m, nil, true
 	case "[", "]":
@@ -745,6 +856,12 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return *m, nil, true
 	case "ctrl+r":
+		if !m.stateReady && len(m.apiBoards) == 0 {
+			return *m, m.initialLoad(), true
+		}
+		if !m.reading {
+			m.newest = false
+		}
 		if m.reading && m.current() != nil {
 			return *m, m.loadThread(m.current().id, m.pages[m.current().id].Page, 0), true
 		}
@@ -762,6 +879,8 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 				m.modal = "menu"
 				m.returnModal = fmt.Sprintf("No.%d · 附件", p.ID)
 				m.menuIndex = 0
+				m.attachmentDirect = true
+				return *m, m.openAttachment(), true
 			} else {
 				m.notice = "当前楼层没有附件"
 			}
@@ -825,7 +944,7 @@ func (m model) extendedDialog() (string, bool) {
 		if m.draft.ThreadID == 0 {
 			content += m.titleInput.View() + "\n\n"
 		}
-		content += m.editor.View() + "\n" + ink(fmt.Sprintf("%d/8192 字节 · %d 个附件 · Esc / Ctrl+S 保存草稿", len(m.editor.Value()), len(m.draft.Files)+len(m.draft.Media)), sand)
+		content += m.editor.View() + "\n" + ink(fmt.Sprintf("%d/8192 字节 · %d 个附件 · 自动保存 · F2 编辑历史 · Esc 保存返回", len(m.editor.Value()), len(m.draft.Files)+len(m.draft.Media)), sand)
 	case "publish":
 		content = strong("发布预览", teal) + "\n\n" + m.popup.View() + "\n\n" + ink("Enter 确认上传并发布 · Esc 返回编辑 · ↑↓ 滚动", sand)
 	case "confirm":
@@ -842,6 +961,12 @@ func (m model) extendedDialog() (string, bool) {
 			content += s + "\n"
 		}
 		content += "\n" + ink("↑↓ 选择 · Enter 打开 · Esc 返回", muted)
+	case "history-filter", "favorites-filter":
+		label := "筛选浏览历史"
+		if m.modal == "favorites-filter" {
+			label = "筛选收藏"
+		}
+		content = strong(label, teal) + "\n\n" + m.input.View() + "\n\nEnter 筛选 · Esc 返回"
 	case "alias", "token", "attach", "register-alias":
 		labels := map[string]string{"alias": "导入饼干：别名", "token": "导入饼干：隐藏输入", "attach": "添加本地附件", "register-alias": "保存领取的饼干"}
 		content = strong(labels[m.modal], teal) + "\n\n" + m.input.View() + "\n\n" + ink("Enter 确定 · Esc 返回", muted)
@@ -851,9 +976,13 @@ func (m model) extendedDialog() (string, bool) {
 	case "attachment":
 		content = strong("附件", teal) + "\n\n" + bodyText(m.menu[m.menuIndex].Value, iw) + "\n\n" + ink("Enter 终端预览 · o 系统打开 · s 下载 · Esc 返回", sand)
 	case "live-help":
-		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点\n↑↓ / jk 选串、帖子和引用 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：Tab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串、帖子和引用 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F2 编辑历史 · Tab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
 		if !m.capabilities().Publish {
-			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · i 饼干\n↑↓ / jk 选串、帖子和引用 · Enter 阅读/操作\nn/p 上下楼 · PgUp/PgDn 滚动\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n发帖、我的内容及管理操作尚未接入。", iw)
+			replyHelp := "发帖、我的内容及管理操作尚未接入。"
+			if m.capabilities().Reply {
+				replyHelp = "r 回复 · R 引用回复 · d 草稿\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n新主串、我的内容及管理操作尚未接入。"
+			}
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串、帖子和引用 · Enter 阅读/操作\nn/p 上下楼 · PgUp/PgDn 滚动\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
 		}
 	default:
 		return "", false

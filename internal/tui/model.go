@@ -15,6 +15,16 @@ import (
 )
 
 type model struct {
+	stateReady                                  bool
+	stateError                                  string
+	stateTickID, draftTickID                    uint64
+	pendingRestore                              *local.Navigation
+	readVisited                                 int64
+	newest                                      bool
+	historyEntries                              []local.HistoryEntry
+	favoriteEntries                             []local.HistoryEntry
+	attachmentDirect                            bool
+	draftEdits                                  []forum.Draft
 	attachment                                  attachmentView
 	jumpSource                                  *thread
 	opts                                        Options

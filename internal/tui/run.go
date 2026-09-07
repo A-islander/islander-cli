@@ -12,6 +12,7 @@ import (
 type Options struct {
 	ForumURL, UserURL, Images, Cookie string
 	Site, DataDir, Backend            string
+	StateWarning                      string
 	Store                             *local.Store
 	Demo                              bool
 }
@@ -23,6 +24,7 @@ func Run(o Options) error {
 	m := newModel()
 	m.opts = o
 	m.store = o.Store
+	m.stateError = o.StateWarning
 	if !o.Demo {
 		m.boardNames = []string{"全部"}
 		m.threads = nil
@@ -37,8 +39,26 @@ func Run(o Options) error {
 		if err := m.setIdentity(o.Cookie); err != nil {
 			m.notice = err.Error()
 		}
+		if p, err := local.ReadPreferences(o.DataDir); err == nil {
+			m.siteConfigs = p.Sites
+		}
+		m.rememberSite()
 	}
-	_, err := tea.NewProgram(m).Run()
+	final, err := tea.NewProgram(m).Run()
+	if last, ok := final.(model); ok {
+		last.flushPersistence()
+		if !last.busy && (last.modal == "compose" || last.modal == "filepicker") {
+			if saveErr := last.saveDraft(); saveErr != nil {
+				last.stateError = saveErr.Error()
+			}
+		}
+		if last.stateError != "" {
+			fmt.Fprintln(os.Stderr, "本地保存失败："+last.stateError)
+		}
+		if last.opts.StateWarning != "" {
+			fmt.Fprintln(os.Stderr, last.opts.StateWarning)
+		}
+	}
 	return err
 }
 func (m *model) setIdentity(alias string) error {
@@ -51,5 +71,6 @@ func (m *model) setIdentity(alias string) error {
 		return err
 	}
 	m.identity, m.client = who, client
+	m.loadPersistence()
 	return nil
 }

@@ -19,7 +19,7 @@ type previewResult struct {
 
 // Preview requests have their own cancellation/generation, and never block list
 // navigation or replace an active full-thread request.
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) updateWithPreview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var next tea.Model
 	var cmd tea.Cmd
 	switch v := msg.(type) {

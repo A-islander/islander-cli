@@ -1,7 +1,6 @@
 package local
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"time"
 
 	"github.com/A-islander/islander-cli/internal/forum"
 	"github.com/gofrs/flock"
@@ -211,23 +209,7 @@ func (s *Store) Remove(alias string) error {
 		return errors.New("饼干别名不存在")
 	})
 }
-func (s *Store) SaveDraft(d *forum.Draft) error {
-	if d.Cookie == "" {
-		return errors.New("草稿必须绑定饼干")
-	}
-	if d.ID == "" {
-		var b [12]byte
-		if _, e := rand.Read(b[:]); e != nil {
-			return e
-		}
-		d.ID = hex.EncodeToString(b[:])
-	}
-	if !nameRE.MatchString(d.ID) {
-		return errors.New("无效草稿编号")
-	}
-	d.Updated = time.Now().Unix()
-	return atomic(filepath.Join(s.Dir, "draft-"+d.ID+".json"), d)
-}
+func (s *Store) SaveDraft(d *forum.Draft) error { return s.saveDraft(d, true) }
 func (s *Store) Drafts(alias string) ([]forum.Draft, error) {
 	files, e := filepath.Glob(filepath.Join(s.Dir, "draft-*.json"))
 	if e != nil {
@@ -254,11 +236,14 @@ func (s *Store) DeleteDraft(id string) error {
 	if !nameRE.MatchString(id) {
 		return errors.New("无效草稿编号")
 	}
-	e := os.Remove(filepath.Join(s.Dir, "draft-"+id+".json"))
-	if os.IsNotExist(e) {
-		return nil
-	}
-	return e
+	path := filepath.Join(s.Dir, "draft-"+id+".json")
+	return lockedFile(path, func() error {
+		err := os.Remove(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	})
 }
 
 // NewSite retains the exact legacy scope for Islander, including custom servers.

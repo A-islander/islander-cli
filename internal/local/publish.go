@@ -8,16 +8,16 @@ import (
 // Publish is called only after an identity/content/target preview is confirmed.
 // Save successful uploads so a later failure does not require uploading again.
 func (s *Store) Publish(ctx context.Context, c forum.Backend, d forum.Draft) (forum.Draft, error) {
-	if !c.Capabilities().Publish {
+	if !c.Capabilities().CanPublish(d.ThreadID > 0) {
 		return d, forum.Unsupported("发帖")
 	}
-	if e := d.Validate(); e != nil {
+	if e := forum.ValidateDraft(c, d); e != nil {
 		return d, e
 	}
 	if e := s.SaveDraft(&d); e != nil {
 		return d, e
 	}
-	for len(d.Files) > 0 {
+	for len(d.Files) > 0 && !forum.InlineFiles(c) {
 		m, e := c.Upload(ctx, d.Files[0])
 		if e != nil {
 			return d, e

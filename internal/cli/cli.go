@@ -22,6 +22,7 @@ import (
 type app struct {
 	f, u, dir, backend, cookie, output, images string
 	site, token                                string
+	stateWarning                               string
 	demo                                       bool
 	store                                      *local.Store
 	client                                     forum.Backend
@@ -107,6 +108,7 @@ func (a *app) root() *cobra.Command {
 			return errors.New("images 只能是 auto、kitty、blocks 或 off")
 		}
 		var e error
+		a.restoreTUISite(cmd)
 		site, e := forum.Resolve(a.site, a.f, a.u)
 		if e != nil {
 			return e
@@ -127,7 +129,7 @@ func (a *app) root() *cobra.Command {
 		return e
 	}
 	run := func(*cobra.Command, []string) error {
-		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo})
+		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo, StateWarning: a.stateWarning})
 	}
 	root.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 	tc := &cobra.Command{Use: "tui", Short: "交互浏览论坛", Args: cobra.NoArgs, RunE: run}
@@ -297,7 +299,7 @@ func (a *app) composeCommand(use string, reply bool) *cobra.Command {
 	var dry bool
 	var quote int
 	cmd := &cobra.Command{Use: use, Short: "预览后使用 --confirm 发布", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		if !a.client.Capabilities().Publish {
+		if !a.client.Capabilities().CanPublish(reply) {
 			return forum.Unsupported("发帖")
 		}
 		if e := a.auth(); e != nil {
@@ -315,7 +317,7 @@ func (a *app) composeCommand(use string, reply bool) *cobra.Command {
 		if quote > 0 {
 			d.Body = forum.Quote(a.site, quote) + "\n" + d.Body
 		}
-		if e = d.Validate(); e != nil {
+		if e = forum.ValidateDraft(a.client, d); e != nil {
 			return e
 		}
 		digests := []string{}
@@ -504,10 +506,10 @@ func (a *app) draftCommands() *cobra.Command {
 					return a.emit(d)
 				}
 				if action == "publish" {
-					if !a.client.Capabilities().Publish {
+					if !a.client.Capabilities().CanPublish(d.ThreadID > 0) {
 						return forum.Unsupported("发帖")
 					}
-					if e = d.Validate(); e != nil {
+					if e = forum.ValidateDraft(a.client, d); e != nil {
 						return e
 					}
 				}

@@ -100,7 +100,8 @@ func TestSelectedPostActions(t *testing.T) {
 						t.Fatal("SAGE did not confirm selected reply")
 					}
 				case "a":
-					if m.modal != "menu" || len(m.menu) != 1 || m.menu[0].Value != "https://example.com/reply.png" {
+					defer m.attachment.cancel()
+					if m.modal != "attachment" || !m.attachmentDirect || len(m.menu) != 1 || m.menu[0].Value != "https://example.com/reply.png" {
 						t.Fatal("attachments did not belong to selected reply")
 					}
 				}

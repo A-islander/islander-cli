@@ -7,6 +7,17 @@ import (
 	"path/filepath"
 )
 
+func (m model) siteBranding() (name, wordmark, slogan string) {
+	switch m.opts.Site {
+	case "x":
+		return "X岛", "NMBXD", "人，是会思考的芦苇"
+	case "bog":
+		return "BOG岛", "BOG", "[xxx]"
+	default:
+		return "岛民岛", "ISLANDER", "岛民岛的岛是岛民的岛"
+	}
+}
+
 func (m model) capabilities() forum.Capabilities {
 	if m.client != nil {
 		return m.client.Capabilities()
@@ -28,6 +39,7 @@ func (m *model) openSites() {
 	m.returnModal = "切换站点"
 }
 func (m *model) switchSite(id string) tea.Cmd {
+	m.flushPersistence()
 	if m.siteConfigs == nil {
 		m.siteConfigs = map[string]forum.Site{}
 	}
@@ -85,6 +97,7 @@ func (m *model) switchSite(id string) tea.Cmd {
 		m.cancel()
 	}
 	*m = next
+	m.rememberSite()
 	m.refilter()
 	return m.initialLoad()
 }
