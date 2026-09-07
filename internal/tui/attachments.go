@@ -194,6 +194,9 @@ func (m *model) attachmentUpdate(msg tea.Msg) (tea.Cmd, bool) {
 		case "esc", "q":
 			cmd := m.closeAttachment()
 			m.modal = "menu"
+			if m.attachmentDirect {
+				m.modal = ""
+			}
 			return cmd, true
 		case "ctrl+c":
 			return tea.Sequence(m.closeAttachment(), tea.Quit), true

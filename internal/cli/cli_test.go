@@ -8,6 +8,8 @@ import (
 	"github.com/A-islander/islander-cli/internal/local"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -92,5 +94,44 @@ func TestUnknownCommandDoesNotOpenTUI(t *testing.T) {
 	}
 	if a.client != nil || a.store != nil {
 		t.Fatal("unknown command initialized services")
+	}
+}
+
+func TestExternalReplyPreviewDoesNotSendRequests(t *testing.T) {
+	for _, site := range []string{"x", "bog"} {
+		t.Run(site, func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+			defer server.Close()
+			dir := t.TempDir()
+			store, _ := local.NewSite(dir, site, server.URL+"/", "", "file")
+			token := "cookie"
+			if site == "bog" {
+				token = "bog_master=master; bog_sel=shadow"
+			}
+			if err := store.Import("daily", token, forum.User{Key: "cookie"}); err != nil {
+				t.Fatal(err)
+			}
+			body := filepath.Join(t.TempDir(), "reply.txt")
+			if err := os.WriteFile(body, []byte("reply"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			base := []string{"--site", site, "--forum-url", server.URL, "--data-dir", dir, "--cookie", "daily", "reply", "create", "--thread", "100", "--quote", "101", "--body-file", body}
+			for _, flags := range [][]string{{"--dry-run"}, {"--confirm", "wrong-confirmation"}} {
+				a := &app{}
+				cmd := a.root()
+				cmd.SetArgs(append(append([]string{}, base...), flags...))
+				err := cmd.Execute()
+				if flags[0] == "--dry-run" && err != nil {
+					t.Fatal(err)
+				}
+				if flags[0] == "--confirm" && (err == nil || !strings.Contains(err.Error(), "确认码")) {
+					t.Fatal("incorrect confirmation not rejected")
+				}
+			}
+			if requests != 0 {
+				t.Fatal("preview or wrong confirmation contacted external forum")
+			}
+		})
 	}
 }

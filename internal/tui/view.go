@@ -213,7 +213,7 @@ func (m model) listPanel() string {
 	iw := w - 6
 	title := strong("岛上此刻", foam)
 	if m.kind == "mine" {
-		title = strong("我的内容", teal)
+		title = strong("我的内容 · "+m.identity.Alias, teal)
 	}
 	if m.filter != "" {
 		title = strong("筛选结果", foam)
@@ -236,6 +236,9 @@ func (m model) listPanel() string {
 		prefix := "  "
 		if vi == m.selected {
 			prefix = "› "
+		}
+		if m.isFavorite(t.id) {
+			prefix += "★ "
 		}
 		first := clip(prefix+t.title, iw)
 		meta := clip(fmt.Sprintf("  %s · No.%d · %d 回复", t.board, t.id, m.replyCount(t)), iw)
@@ -261,6 +264,9 @@ func (m model) readerPanel() string {
 	label := "串预览"
 	if m.reading {
 		label = "正在阅读"
+	}
+	if m.isFavorite(t.id) {
+		label += " ★"
 	}
 	header := row(strong(label, teal), ink(t.board+" / "+fmt.Sprintf("No.%d", t.id), muted), w-6)
 	active, _ := m.selectedPost()
@@ -327,14 +333,15 @@ func (m model) dialog() string {
 }
 
 func (m model) View() tea.View {
+	name, wordmark, slogan := m.siteBranding()
 	if m.width < 44 || m.height < 16 {
-		return screenView(m.width, m.height, lipgloss.NewLayer(rectangle("岛民岛\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
+		return screenView(m.width, m.height, lipgloss.NewLayer(rectangle(name+"\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
 	}
 	iw := m.width - 2
-	header := row(badge("岛民岛", ocean, teal)+"  "+strong("ISLANDER", foam), badge(m.environmentLabel(), sand, selectedBG)+"  "+ink(m.identityLabel(), muted), iw)
-	subtitle := row(ink("一座小岛，一会儿闲暇。", muted), ink("~  漂流到这里，歇一会儿  ~", muted), iw)
+	header := row(badge(name, ocean, teal)+"  "+strong(wordmark, foam), badge(m.environmentLabel(), sand, selectedBG)+"  "+ink(m.identityLabel(), muted), iw)
+	subtitle := ink(slogan, muted)
 	if m.kind == "mine" {
-		subtitle = ink(clip("我的内容 · "+m.identity.Alias+" · 发串与回复（含删除记录）", iw), teal)
+		subtitle = row(subtitle, ink("我的内容 · "+m.identity.Alias+" · 发串与回复（含删除记录）", teal), iw)
 	}
 	var tabs []string
 	for i, b := range m.boardNames {
@@ -371,18 +378,12 @@ func (m model) View() tea.View {
 	} else {
 		body = m.listPanel()
 	}
-	help := "g 切站  ↑↓ 选串  Enter 阅读  b 板块  c 发串  i 饼干  d 草稿  [ ] 翻页  ? 帮助"
+	help := "g 切站  b 板块  H 历史  F 收藏  * 收藏/取消  Enter 阅读  a 图片  ? 帮助"
 	if m.reading {
-		help = "b 板块  ↑↓ 选楼  Enter 操作  PgUp/PgDn 滚动  R 引用  s SAGE  a 附件  Esc 返回"
-	}
-	if !m.capabilities().Publish {
-		help = "g 切站  b 板块  ↑↓ 移动  Enter 阅读/操作  v 引用  a 附件  [ ] 翻页  ? 帮助"
+		help = "b 板块  H 历史  F 收藏  * 收藏/取消  a 图片  r 回复 R 引用  Enter 操作  ? 帮助"
 	}
 	if m.width < 80 {
-		help = "b 板块  ↑↓ 移动  Enter 阅读  ? 帮助"
-		if m.reading {
-			help = "b 板块  ↑↓ 选楼  Enter 操作  ? 帮助"
-		}
+		help = "b 板块 H 历史 F 收藏 a 图片 ? 帮助"
 	}
 	notice := m.notice
 	if m.busy {
@@ -390,6 +391,11 @@ func (m model) View() tea.View {
 	}
 	if m.filter != "" {
 		notice = "筛选「" + m.filter + "」 · Esc 返回列表后可清除"
+	}
+	if m.stateError != "" {
+		notice = "本地保存：" + m.stateError
+	} else if m.opts.StateWarning != "" {
+		notice = m.opts.StateWarning
 	}
 	content := header + "\n" + subtitle + "\n\n" + clip(tabline, iw) + "\n\n" + body + "\n" + ink(clip(notice, iw), muted) + "\n" + ink(clip(help, iw), teal) + "\n"
 	base := lipgloss.NewStyle().Background(lipgloss.Color(ocean)).Foreground(lipgloss.Color(foam)).Padding(0, 1).Render(rectangle(content, iw, m.height))
@@ -401,6 +407,7 @@ func (m model) View() tea.View {
 	v := screenView(m.width, m.height, layers...)
 	if !m.opts.Demo {
 		v.MouseMode = tea.MouseModeCellMotion
+		v.ReportFocus = true
 	}
 	return v
 }

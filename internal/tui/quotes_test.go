@@ -108,7 +108,8 @@ func TestInlineQuotesFetchMultipleCyclesAndActions(t *testing.T) {
 	}
 	m.modal = ""
 	m = press(m, "a")
-	if m.modal != "menu" || len(m.menu) != 1 || m.menu[0].Value != "https://example.com/nested.png" {
+	defer m.attachment.cancel()
+	if m.modal != "attachment" || !m.attachmentDirect || len(m.menu) != 1 || m.menu[0].Value != "https://example.com/nested.png" {
 		t.Fatal("attachments target the wrong nested post")
 	}
 	m.modal = ""

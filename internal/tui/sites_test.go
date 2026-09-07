@@ -110,7 +110,7 @@ func TestUnknownTotalPaginationAndUnavailableActions(t *testing.T) {
 	}
 	m.openPostActions()
 	for _, item := range m.menu {
-		if item.Value != "a" && item.Value != "v" {
+		if item.Value != "a" && item.Value != "v" && item.Value != "*" && item.Value != "F" {
 			t.Fatal("unsupported action visible")
 		}
 	}

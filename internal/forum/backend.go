@@ -8,11 +8,30 @@ import (
 
 type Capabilities struct {
 	Publish  bool `json:"publish"`
+	Reply    bool `json:"reply"`
 	Mine     bool `json:"mine"`
 	Sage     bool `json:"sage"`
 	Manage   bool `json:"manage"`
 	Register bool `json:"register"`
 	Verify   bool `json:"verify"`
+}
+
+func (c Capabilities) CanPublish(reply bool) bool {
+	return c.Publish || (reply && c.Reply)
+}
+
+// Adapters may validate their own draft constraints and submit files together
+// with the final form, instead of using a separate upload endpoint.
+func ValidateDraft(c Backend, d Draft) error {
+	if v, ok := c.(interface{ ValidateDraft(Draft) error }); ok {
+		return v.ValidateDraft(d)
+	}
+	return d.Validate()
+}
+
+func InlineFiles(c Backend) bool {
+	v, ok := c.(interface{ InlineFiles() bool })
+	return ok && v.InlineFiles()
 }
 
 type Reader interface {
@@ -109,7 +128,7 @@ func NewBackend(site, f, u, token string) (Backend, error) {
 }
 
 func (*Client) Capabilities() Capabilities {
-	return Capabilities{Publish: true, Mine: true, Sage: true, Manage: true, Register: true, Verify: true}
+	return Capabilities{Publish: true, Reply: true, Mine: true, Sage: true, Manage: true, Register: true, Verify: true}
 }
 
 func Unsupported(action string) error {

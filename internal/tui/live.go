@@ -131,6 +131,7 @@ func (m *model) displayThread(p forum.Post) thread {
 	return thread{p.ID, board, title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
+	m.stateReady = true
 	m.inlineQuotes = map[string][]inlineQuote{}
 	m.quoteOffsets = map[string]int{}
 	m.listError = ""
@@ -143,6 +144,10 @@ func (m *model) applyPage(p forum.Page) {
 		m.threads = append(m.threads, m.displayThread(v))
 	}
 	m.refilter()
+	if m.newest {
+		m.sortNewest()
+		m.refreshReader(false)
+	}
 	m.notice = p.Label() + " · b 板块 / g 切站 / i 饼干"
 	if m.kind == "mine" {
 		m.notice = fmt.Sprintf("我的内容 · 饼干 %s · 发串与回复（含删除记录）· 第 %d 页 / %d 条", m.identity.Alias, p.Page, p.Count)
@@ -165,6 +170,7 @@ func (m *model) openMine() tea.Cmd {
 		return nil
 	}
 	m.pendingMine = false
+	m.pendingRestore = nil
 	m.savePosition()
 	m.modal, m.filter = "", ""
 	m.kind, m.board = "mine", 0
@@ -225,6 +231,8 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 	})
 }
 func (m *model) applyThread(r threadResult) {
+	m.stateReady = true
+	m.readVisited = time.Now().UnixNano()
 	t := m.displayThread(r.Root)
 	t.posts = nil
 	for _, p := range r.Page.List {

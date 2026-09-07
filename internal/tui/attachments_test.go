@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/A-islander/islander-cli/internal/forum"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
@@ -135,5 +136,27 @@ func TestAttachmentTimeoutAndScreenSizes(t *testing.T) {
 		if !strings.Contains(view, "Esc 返回") {
 			t.Fatal("attachment controls not visible")
 		}
+	}
+}
+
+func TestAttachmentShortcutReturnsDirectlyToSelectedPost(t *testing.T) {
+	m := newModel()
+	m.opts = Options{Site: "x", Images: "auto"}
+	root := forum.Post{ID: 100, Body: "主楼"}
+	reply := forum.Post{ID: 101, FollowID: 100, Body: "带附件的楼层", MediaURL: `["https://example.test/one.png", "https://example.test/two.png"]`}
+	m.applyThread(threadResult{Root: root, Page: forum.Page{Page: 42, List: []forum.Post{root, reply}}})
+	m.movePost(1)
+	offset := m.reader.YOffset()
+	m = press(m, "a")
+	if m.modal != "attachment" || !m.attachmentDirect || len(m.menu) != 2 || m.menuIndex != 0 || m.attachment.capability != 0 {
+		t.Fatal("a did not directly open first image with automatic protocol detection")
+	}
+	m = press(m, "right")
+	if m.menuIndex != 1 {
+		t.Fatal("direct preview did not allow next attachment")
+	}
+	m = press(m, "esc")
+	if m.modal != "" || !m.reading || m.activePost != 1 || m.reader.YOffset() != offset || m.pages[100].Page != 42 {
+		t.Fatal("direct image preview did not preserve thread position")
 	}
 }

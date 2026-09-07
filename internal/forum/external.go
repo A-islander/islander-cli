@@ -95,7 +95,9 @@ func (h *external) get(ctx context.Context, path string, q url.Values) ([]byte, 
 	return b, nil
 }
 
-func (h *external) Capabilities() Capabilities { return Capabilities{Verify: h.site.ID == "x"} }
+func (h *external) Capabilities() Capabilities {
+	return Capabilities{Reply: true, Verify: h.site.ID == "x"}
+}
 func (h *external) Publish(context.Context, Draft) error {
 	return Unsupported("发帖；可在站点网页操作")
 }
