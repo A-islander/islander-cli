@@ -86,3 +86,77 @@ func TestKittyVirtualPlacement(t *testing.T) {
 		t.Fatal("delete must target only owned image")
 	}
 }
+
+func TestTmuxTransportChunks(t *testing.T) {
+	// Incompressible pixels produce more than one 4096-byte protocol chunk.
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	var n uint32 = 123
+	for i := range img.Pix {
+		n = n*1664525 + 1013904223
+		img.Pix[i] = byte(n >> 24)
+	}
+	raw, err := KittyUpload(img, 0x600001, 40, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks := strings.Count(raw, "\x1b_G")
+	if chunks < 2 {
+		t.Fatal("fixture did not exercise multiple chunks")
+	}
+	wrapped := KittyTransport(raw, true)
+	if strings.Count(wrapped, "\x1bPtmux;") != chunks {
+		t.Fatal("each upload chunk requires a separate DCS")
+	}
+	var decoded strings.Builder
+	for _, part := range strings.Split(wrapped, "\x1bPtmux;")[1:] {
+		if !strings.HasSuffix(part, "\x1b\\") {
+			t.Fatal("missing outer ST")
+		}
+		inner := strings.TrimSuffix(part, "\x1b\\")
+		decoded.WriteString(strings.ReplaceAll(inner, "\x1b\x1b", "\x1b"))
+	}
+	if decoded.String() != raw || KittyTransport(raw, false) != raw {
+		t.Fatal("transport corrupted payload")
+	}
+	for _, data := range []string{KittyQuery(12), KittyDelete(12), KittyResize(12, 4, 2)} {
+		want := "\x1bPtmux;" + strings.ReplaceAll(data, "\x1b", "\x1b\x1b") + "\x1b\\"
+		if KittyTransport(data, true) != want {
+			t.Fatal("control command not escaped")
+		}
+	}
+}
+
+func TestThumbnailBoundsWithoutChangingFullPreview(t *testing.T) {
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 800, 600))); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data.Bytes()) }))
+	defer server.Close()
+	thumb, err := LoadThumbnail(context.Background(), server.URL)
+	if err != nil || thumb.Bounds().Dx() != 256 || thumb.Bounds().Dy() != 192 {
+		t.Fatalf("thumbnail bounds: %v %v", thumb, err)
+	}
+	full, err := LoadImage(context.Background(), server.URL)
+	if err != nil || full.Bounds().Dx() != 800 || full.Bounds().Dy() != 600 {
+		t.Fatal("small-image limits reduced original preview")
+	}
+}
+
+func TestZoomedImageRegions(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: uint8(x), G: uint8(y), A: 255})
+		}
+	}
+	blocks := BlocksRegion(img, 8, 4, 3, 1, 2, 1)
+	if !strings.Contains(blocks, "38;2;3;2;0;48;2;3;3;0") || ansi.StringWidth(blocks) != 2 {
+		t.Fatal("cropped blocks sampled wrong source pixels")
+	}
+	cells := KittyCellsRegion(0x500001, 3, 4, 2, 1)
+	first := string(kitty.Placeholder) + string(kitty.Diacritic(4)) + string(kitty.Diacritic(3))
+	if !strings.HasPrefix(ansi.Strip(cells), first) || ansi.StringWidth(cells) != 2 {
+		t.Fatal("native crop lost full placement coordinates")
+	}
+}

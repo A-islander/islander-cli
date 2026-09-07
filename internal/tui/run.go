@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"github.com/A-islander/islander-cli/internal/forum"
 	"github.com/A-islander/islander-cli/internal/local"
+	"github.com/A-islander/islander-cli/internal/media"
 	"github.com/charmbracelet/x/term"
 	"os"
+	"time"
 )
 
 type Options struct {
@@ -44,8 +46,26 @@ func Run(o Options) error {
 		}
 		m.rememberSite()
 	}
+	terminal, restoreTerminal := prepareImageTerminal(o.Images)
+	defer restoreTerminal()
+	m.imageTerminal = terminal
 	final, err := tea.NewProgram(m).Run()
 	if last, ok := final.(model); ok {
+		cleanup := last.clearInlineImages()
+		if last.attachment.cancel != nil {
+			last.attachment.cancel()
+		}
+		if last.attachment.sent {
+			cleanup += media.KittyDelete(last.attachment.id)
+		}
+		if cleanup != "" {
+			_, _ = fmt.Fprint(os.Stdout, media.KittyTransport(cleanup, terminal.tmux))
+			if terminal.tmux {
+				// tmux consumes PTY output asynchronously. Give the final
+				// deletes time to pass through before restoring the pane option.
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 		last.flushPersistence()
 		if !last.busy && (last.modal == "compose" || last.modal == "filepicker" || last.modal == "kaomoji") {
 			if saveErr := last.saveDraft(); saveErr != nil {

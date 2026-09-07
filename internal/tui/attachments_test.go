@@ -160,3 +160,90 @@ func TestAttachmentShortcutReturnsDirectlyToSelectedPost(t *testing.T) {
 		t.Fatal("direct image preview did not preserve thread position")
 	}
 }
+
+func TestOriginalAttachmentZoomAndPan(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		m := attachmentModel()
+		m.attachment.cancel()
+		img := image.NewRGBA(image.Rect(0, 0, 160, 80))
+		m.attachmentUpdate(attachmentLoaded{m.attachment.id, img, nil})
+		m.attachment.ready = native
+		m.renderAttachment()
+		id, cols, rows := m.attachment.id, m.attachment.cols, m.attachment.rows
+		post, offset := m.activePost, m.reader.YOffset()
+		m = press(m, "+")
+		if m.attachment.cols <= cols || m.attachment.rows <= rows || m.attachment.img != img || m.attachment.id != id || m.attachment.loading {
+			t.Fatal("original zoom failed or reloaded image")
+		}
+		if m.imageZoom != 0 || m.attachment.percent != 125 {
+			t.Fatal("original zoom changed inline setting or reported wrong percentage")
+		}
+		left, top := m.attachment.left, m.attachment.top
+		m.attachmentUpdate(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModShift})
+		m.attachmentUpdate(tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift})
+		if m.attachment.left <= left || m.attachment.top <= top {
+			t.Fatal("zoomed image did not pan")
+		}
+		if native {
+			first := string(kitty.Placeholder) + string(kitty.Diacritic(m.attachment.top)) + string(kitty.Diacritic(m.attachment.left))
+			if !strings.HasPrefix(ansi.Strip(m.attachment.content), first) {
+				t.Fatal("clipping renumbered native image coordinates")
+			}
+		}
+		for _, size := range [][2]int{{120, 36}, {60, 24}, {44, 16}} {
+			next, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+			m = next.(model)
+			view := m.View().Content
+			if lipgloss.Height(view) != size[1] {
+				t.Fatal("zoom expanded modal height")
+			}
+			for _, line := range strings.Split(view, "\n") {
+				if ansi.StringWidth(line) > size[0] {
+					t.Fatal("zoom expanded modal width")
+				}
+			}
+			for _, hint := range []string{"+/- 缩放", "0 适应", "Esc 返回"} {
+				if !strings.Contains(view, hint) {
+					t.Fatalf("missing visible control: %s", hint)
+				}
+			}
+		}
+		m = press(m, "0")
+		if m.attachment.percent != 100 || m.attachment.left != 0 || m.attachment.top != 0 {
+			t.Fatal("0 did not restore fit")
+		}
+		m = press(m, "-")
+		if m.attachment.percent != 80 {
+			t.Fatal("minus did not shrink original")
+		}
+		m = press(m, "=")
+		if m.attachment.percent != 100 {
+			t.Fatal("= did not enlarge original")
+		}
+		// Test opening/closing with unchanged window size separately from resize.
+		m.resize(120, 36)
+		m.activePost = post
+		m.reader.SetYOffset(offset)
+		m = press(m, "esc")
+		if m.activePost != post || m.reader.YOffset() != offset {
+			t.Fatal("image zoom changed reading position")
+		}
+	}
+}
+
+func TestAttachmentZoomResetsOnSwitchAndIgnoresPendingLoad(t *testing.T) {
+	m := attachmentModel()
+	original := m.attachment.id
+	m = press(m, "+")
+	if m.attachment.zoom != 0 {
+		t.Fatal("zoomed before image dimensions were available")
+	}
+	m.attachment.cancel()
+	m.attachmentUpdate(attachmentLoaded{original, image.NewRGBA(image.Rect(0, 0, 160, 80)), nil})
+	m = press(m, "+")
+	m = press(m, "l")
+	defer m.attachment.cancel()
+	if m.attachment.id == original || m.attachment.zoom != 0 || m.attachment.left != 0 || m.attachment.top != 0 {
+		t.Fatal("next image inherited previous crop")
+	}
+}
