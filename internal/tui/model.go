@@ -15,33 +15,39 @@ import (
 )
 
 type model struct {
-	jumpSource    *thread
-	opts          Options
-	store         *local.Store
-	client        *forum.Client
-	identity      local.Cookie
-	boardNames    []string
-	apiBoards     []forum.Board
-	raw           map[int]forum.Post
-	pages         map[int]forum.Page
-	kind          string
-	page, total   int
-	listError     string
-	busy          bool
-	requestID     int
-	cancel        context.CancelFunc
-	editor        textarea.Model
-	titleInput    textinput.Model
-	editTitle     bool
-	draft         forum.Draft
-	menu          []menuItem
-	menuIndex     int
-	confirmAction string
-	confirmID     int
-	aliasInput    string
-	returnModal   string
-	pendingMine   bool
-	filePicker    fileBrowser
+	attachment                                  attachmentView
+	jumpSource                                  *thread
+	opts                                        Options
+	store                                       *local.Store
+	client                                      forum.Backend
+	siteConfigs                                 map[string]forum.Site
+	listPage                                    forum.Page
+	previewID, previewGeneration, previewTarget int
+	previewCancel                               context.CancelFunc
+	previews                                    map[int]previewResult
+	identity                                    local.Cookie
+	boardNames                                  []string
+	apiBoards                                   []forum.Board
+	raw                                         map[int]forum.Post
+	pages                                       map[int]forum.Page
+	kind                                        string
+	page, total                                 int
+	listError                                   string
+	busy                                        bool
+	requestID                                   int
+	cancel                                      context.CancelFunc
+	editor                                      textarea.Model
+	titleInput                                  textinput.Model
+	editTitle                                   bool
+	draft                                       forum.Draft
+	menu                                        []menuItem
+	menuIndex                                   int
+	confirmAction                               string
+	confirmID                                   int
+	aliasInput                                  string
+	returnModal                                 string
+	pendingMine                                 bool
+	filePicker                                  fileBrowser
 
 	threads                  []thread
 	visible                  []int
@@ -81,7 +87,7 @@ func (m model) Init() tea.Cmd {
 	if m.opts.Demo {
 		return nil
 	}
-	return m.initialLoad()
+	return func() tea.Msg { return startMsg{} }
 }
 
 func (m model) current() *thread {
@@ -92,6 +98,9 @@ func (m model) current() *thread {
 }
 
 func (m *model) savePosition() {
+	if !m.opts.Demo && !m.reading {
+		return
+	}
 	if t := m.current(); t != nil {
 		m.offsets[t.id] = m.reader.YOffset()
 	}
@@ -150,6 +159,11 @@ func (m *model) refreshReader(restore bool) {
 	t := m.current()
 	if t == nil {
 		m.reader.SetContent("")
+		return
+	}
+	if !m.opts.Demo && !m.reading {
+		m.reader.SetContent(m.previewContent(*t))
+		m.reader.GotoTop()
 		return
 	}
 	if restore {
@@ -264,7 +278,7 @@ func (m *model) submitInput() {
 	m.modal = ""
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next, cmd, handled := m.extendedUpdate(msg); handled {
 		return next, cmd
 	}

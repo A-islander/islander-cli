@@ -11,6 +11,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/net v0.58.0
 )
 
 require (

@@ -19,10 +19,12 @@ import (
 )
 
 type Cookie struct {
-	Alias   string `json:"alias"`
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Backend string `json:"backend"`
+	Key          string `json:"key,omitempty"`
+	Verification string `json:"verification,omitempty"`
+	Alias        string `json:"alias"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Backend      string `json:"backend"`
 }
 type State struct {
 	Active  string   `json:"active"`
@@ -114,7 +116,7 @@ func (s *Store) Import(alias, token string, u forum.User) error {
 	if !nameRE.MatchString(alias) {
 		return errors.New("别名请用 1–48 位字母、数字、下划线或短横线")
 	}
-	if token == "" || u.ID <= 0 {
+	if token == "" || (u.ID <= 0 && u.Key == "") {
 		return errors.New("无效饼干")
 	}
 	return s.change(func(v *State) error {
@@ -130,7 +132,7 @@ func (s *Store) Import(alias, token string, u forum.User) error {
 		} else if e := keyring.Set("islander-"+s.Scope, alias, token); e != nil {
 			return errors.New("系统凭证库不可用；可重新使用 --credential-store file 显式选择本地明文存储（0600）")
 		}
-		v.Cookies = append(v.Cookies, Cookie{alias, u.ID, forum.Clean(u.Name), s.Backend})
+		v.Cookies = append(v.Cookies, Cookie{Alias: alias, ID: u.ID, Name: forum.Clean(u.Name), Backend: s.Backend, Key: u.Key, Verification: u.Verification})
 		v.Active = alias
 		return nil
 	})
@@ -257,4 +259,12 @@ func (s *Store) DeleteDraft(id string) error {
 		return nil
 	}
 	return e
+}
+
+// NewSite retains the exact legacy scope for Islander, including custom servers.
+func NewSite(root, site, forumURL, userURL, backend string) (*Store, error) {
+	if site == "" || site == "islander" {
+		return New(root, forumURL, userURL, backend)
+	}
+	return New(root, site+"\n"+forumURL, userURL, backend)
 }

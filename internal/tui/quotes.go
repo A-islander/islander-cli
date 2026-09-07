@@ -187,7 +187,7 @@ func (m *model) toggleInlineQuotes() tea.Cmd {
 		m.applyInlineQuotes(result)
 		return nil
 	}
-	return m.launch("inline-quote", func(ctx context.Context, c *forum.Client) (any, error) {
+	return m.launch("inline-quote", func(ctx context.Context, c forum.Backend) (any, error) {
 		for _, id := range missing {
 			p, err := c.Post(ctx, id)
 			if err != nil {

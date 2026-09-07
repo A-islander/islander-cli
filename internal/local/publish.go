@@ -7,7 +7,10 @@ import (
 
 // Publish is called only after an identity/content/target preview is confirmed.
 // Save successful uploads so a later failure does not require uploading again.
-func (s *Store) Publish(ctx context.Context, c *forum.Client, d forum.Draft) (forum.Draft, error) {
+func (s *Store) Publish(ctx context.Context, c forum.Backend, d forum.Draft) (forum.Draft, error) {
+	if !c.Capabilities().Publish {
+		return d, forum.Unsupported("发帖")
+	}
 	if e := d.Validate(); e != nil {
 		return d, e
 	}

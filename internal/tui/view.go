@@ -105,6 +105,9 @@ func bodyText(body string, width int) string {
 }
 
 func (m model) mineButton() string {
+	if !m.capabilities().Mine {
+		return badge("g 切换站点", teal, selectedBG)
+	}
 	if m.kind == "mine" {
 		return badge("m 我的内容", ocean, teal)
 	}
@@ -123,11 +126,15 @@ func (m *model) threadContent(t thread) string {
 		w := max(1, m.reader.Width()-2-len(indent))
 		floor := fmt.Sprintf("%02d 楼", root)
 		if page, ok := m.pages[t.id]; ok {
-			floor = fmt.Sprintf("%02d 楼", (page.Page-1)*forum.PageSize+root)
+			if page.Offset < 0 {
+				floor = fmt.Sprintf("本页 %d", root+1)
+			} else {
+				floor = fmt.Sprintf("%02d 楼", page.Offset+root)
+			}
 		}
 		isOP := root == 0
 		if raw, ok := m.raw[p.id]; ok {
-			isOP = raw.FollowID == 0
+			isOP = raw.FollowID == 0 && !raw.ParentUnknown
 		}
 		if isOP {
 			floor = "主楼"
@@ -137,7 +144,7 @@ func (m *model) threadContent(t thread) string {
 		}
 		meta := strong(fmt.Sprintf("No.%d", p.id), teal) + "  " + ink(p.author, sand)
 		lines = append(lines, row(meta, ink(floor+" · "+p.time, muted), w), "")
-		if depth == 0 && isOP {
+		if depth == 0 && isOP && title != "" {
 			lines = append(lines, strings.Split(strong(wrapText(title, w), foam), "\n")...)
 			lines = append(lines, "")
 		}
@@ -180,7 +187,11 @@ func (m *model) threadContent(t thread) string {
 	}
 	for i, p := range t.posts {
 		m.postLines = append(m.postLines, len(lines))
-		render(p, fmt.Sprint(p.id), i, 0, t.title, "")
+		title := t.title
+		if raw, ok := m.raw[t.id]; ok {
+			title = forum.Clean(raw.Title)
+		}
+		render(p, fmt.Sprint(p.id), i, 0, title, "")
 		lines = append(lines, ink(strings.Repeat("─", max(1, m.reader.Width()-2)), lineColor), "")
 	}
 	end := "已经读到串尾了。慢慢来，岛一直在。"
@@ -207,7 +218,7 @@ func (m model) listPanel() string {
 	if m.filter != "" {
 		title = strong("筛选结果", foam)
 	}
-	lines := []string{row(title, ink(fmt.Sprintf("%d/%d页", m.page, max(1, (m.total+19)/20)), muted), iw), ""}
+	lines := []string{row(title, ink(m.listPage.Label(), muted), iw), ""}
 	if len(m.visible) == 0 {
 		if m.busy {
 			lines = append(lines, ink("正在读取内容…", muted))
@@ -259,7 +270,15 @@ func (m model) readerPanel() string {
 	}
 	position := fmt.Sprintf("%02d / %02d 楼", m.activePost, len(t.posts)-1)
 	if page, ok := m.pages[t.id]; ok {
-		position = fmt.Sprintf("%d/%d楼 · %d页", (page.Page-1)*forum.PageSize+m.activePost, max(0, page.Count-1), page.Page)
+		if page.Offset < 0 {
+			position = fmt.Sprintf("本页 %d/%d · %d页", m.activePost+1, len(t.posts), page.Page)
+		} else {
+			position = fmt.Sprintf("%d/%d楼 · %d页", page.Offset+m.activePost, max(0, page.Count-1), page.Page)
+		}
+	}
+	if !m.opts.Demo && !m.reading {
+		position = "Enter 打开完整串"
+		status = "主楼与回复预览"
 	}
 	if m.activeQuote != "" {
 		position = "引用 · Esc 上一层"
@@ -269,6 +288,9 @@ func (m model) readerPanel() string {
 }
 
 func (m model) dialog() string {
+	if m.modal == "attachment" {
+		return m.attachmentDialog()
+	}
 	if s, ok := m.extendedDialog(); ok {
 		return s
 	}
@@ -349,14 +371,17 @@ func (m model) View() tea.View {
 	} else {
 		body = m.listPanel()
 	}
-	help := "↑↓ 选串  Enter 阅读  b 板块  c 发串  i 饼干  d 草稿  [ ] 翻页  ? 帮助"
+	help := "g 切站  ↑↓ 选串  Enter 阅读  b 板块  c 发串  i 饼干  d 草稿  [ ] 翻页  ? 帮助"
 	if m.reading {
-		help = "↑↓ 选楼  Enter 操作  PgUp/PgDn 滚动  R 引用  s SAGE  a 附件  Esc 返回"
+		help = "b 板块  ↑↓ 选楼  Enter 操作  PgUp/PgDn 滚动  R 引用  s SAGE  a 附件  Esc 返回"
+	}
+	if !m.capabilities().Publish {
+		help = "g 切站  b 板块  ↑↓ 移动  Enter 阅读/操作  v 引用  a 附件  [ ] 翻页  ? 帮助"
 	}
 	if m.width < 80 {
-		help = "↑↓ 移动  Enter 阅读  Esc 返回  ? 帮助"
+		help = "b 板块  ↑↓ 移动  Enter 阅读  ? 帮助"
 		if m.reading {
-			help = "↑↓ 选楼  Enter 操作  PgDn 滚动  ? 帮助"
+			help = "b 板块  ↑↓ 选楼  Enter 操作  ? 帮助"
 		}
 	}
 	notice := m.notice
