@@ -52,7 +52,7 @@ def build_dmg(archive, version, arch, output):
         if actual != 'islander version ' + version:
             raise RuntimeError('发布包版本与 DMG 版本不符：' + actual)
         expected_arch = 'arm64' if arch == 'aarch64' else 'x86_64'
-        subprocess.run(['lipo', '-verify_arch', expected_arch, str(binary)], check=True)
+        subprocess.run(['lipo', str(binary), '-verify_arch', expected_arch], check=True)
         launcher = executables / 'islander-launcher'
         shutil.copy2(REPO / 'packaging/macos-launcher', launcher)
         launcher.chmod(0o755)
