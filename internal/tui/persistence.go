@@ -21,6 +21,7 @@ type persistenceTick struct{ ID uint64 }
 type draftSaveTick struct{ ID uint64 }
 
 func (m *model) loadPersistence() {
+	m.listWindow, m.threadWindow = pageWindow{}, pageWindow{}
 	m.stateReady = false
 	m.pendingRestore = nil
 	m.favoriteEntries = nil
@@ -186,6 +187,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	oldFiles := fmt.Sprint(m.draft.Files, m.draft.Media)
 	next, cmd := m.updateWithPreview(msg)
 	n := next.(model)
+	n.syncPagingPosition()
 	var tasks []tea.Cmd
 	if cmd != nil {
 		tasks = append(tasks, cmd)

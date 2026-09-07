@@ -131,6 +131,8 @@ func (m *model) displayThread(p forum.Post) thread {
 	return thread{p.ID, board, title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
+	m.listWindow = newPageWindow(p)
+	m.threadWindow = pageWindow{}
 	m.stateReady = true
 	m.inlineQuotes = map[string][]inlineQuote{}
 	m.quoteOffsets = map[string]int{}
@@ -231,6 +233,7 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 	})
 }
 func (m *model) applyThread(r threadResult) {
+	m.threadWindow = newPageWindow(r.Page)
 	m.stateReady = true
 	m.readVisited = time.Now().UnixNano()
 	t := m.displayThread(r.Root)

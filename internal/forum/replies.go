@@ -33,17 +33,14 @@ func (h *external) replyBase() string {
 }
 
 func (h *external) ValidateDraft(d Draft) error {
-	if d.ThreadID <= 0 {
-		return Unsupported("外站新主串；当前已接入回复")
-	}
 	if err := d.Validate(); err != nil {
 		return err
 	}
 	if h.site.ID == "x" && (len(d.Files) > 1 || len(d.Media) > 0) {
-		return &Error{"invalid", "X 岛回复最多附一张本地图片，不支持复用独立上传链接"}
+		return &Error{"invalid", "X 岛发帖最多附一张本地图片，不支持复用独立上传链接"}
 	}
 	if h.site.ID == "bog" && len(utf16.Encode([]rune(d.Title))) > 50 {
-		return &Error{"invalid", "BOG 回复标题不能超过 50 个字符"}
+		return &Error{"invalid", "BOG 标题不能超过 50 个字符"}
 	}
 	for _, path := range d.Files {
 		if err := replyImage(path); err != nil {
@@ -66,19 +63,19 @@ func replyImage(path string) error {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return &Error{"invalid", "无法读取回复图片"}
+		return &Error{"invalid", "无法读取发帖图片"}
 	}
 	defer f.Close()
 	head := make([]byte, 512)
 	n, err := f.Read(head)
 	if err != nil && err != io.EOF {
-		return &Error{"invalid", "无法读取回复图片"}
+		return &Error{"invalid", "无法读取发帖图片"}
 	}
 	switch http.DetectContentType(head[:n]) {
 	case "image/jpeg", "image/png", "image/gif", "image/bmp":
 		return nil
 	}
-	return &Error{"invalid", "外站回复附件须为 JPEG、PNG、GIF 或 BMP 图片"}
+	return &Error{"invalid", "外站发帖附件须为 JPEG、PNG、GIF 或 BMP 图片"}
 }
 
 // Each submission has a private cookie jar: form/session tokens survive the
@@ -95,7 +92,7 @@ func (h *external) newReplySession() (*replySession, error) {
 	}
 	base, err := url.Parse(h.replyBase())
 	if err != nil {
-		return nil, &Error{"invalid", "回复站点地址无效"}
+		return nil, &Error{"invalid", "发帖站点地址无效"}
 	}
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	req := &http.Request{Header: http.Header{"Cookie": {h.cookie}}}
@@ -112,11 +109,11 @@ func (h *external) newReplySession() (*replySession, error) {
 func (s *replySession) request(ctx context.Context, method, target string, body io.Reader, contentType string) ([]byte, error) {
 	u, err := url.Parse(target)
 	if err != nil || u.Scheme != s.base.Scheme || u.Host != s.base.Host || u.User != nil || u.Fragment != "" {
-		return nil, &Error{"invalid", "拒绝向不同站点提交回复或饼干"}
+		return nil, &Error{"invalid", "拒绝向不同站点提交帖子或饼干"}
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return nil, &Error{"invalid", "无法创建回复请求"}
+		return nil, &Error{"invalid", "无法创建发帖请求"}
 	}
 	req.Header.Set("User-Agent", "islander-cli/0.0.2")
 	if contentType != "" {
@@ -133,7 +130,7 @@ func (s *replySession) request(ctx context.Context, method, target string, body 
 		if method == http.MethodPost {
 			return nil, unknownReply()
 		}
-		return nil, &Error{"network", "无法读取回复表单；尚未提交"}
+		return nil, &Error{"network", "无法读取发帖表单；尚未提交"}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -146,19 +143,19 @@ func (s *replySession) request(ctx context.Context, method, target string, body 
 		if method == http.MethodPost {
 			return nil, unknownReply()
 		}
-		return nil, &Error{"network", fmt.Sprintf("回复表单返回 HTTP %d；不跟随重定向，尚未提交", resp.StatusCode)}
+		return nil, &Error{"network", fmt.Sprintf("发帖表单返回 HTTP %d；不跟随重定向，尚未提交", resp.StatusCode)}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, (8<<20)+1))
 	if err != nil || len(data) > 8<<20 {
 		if method == http.MethodPost {
 			return nil, unknownReply()
 		}
-		return nil, &Error{"response", "回复表单无法读取或过大；尚未提交"}
+		return nil, &Error{"response", "发帖表单无法读取或过大；尚未提交"}
 	}
 	return data, nil
 }
 func unknownReply() error {
-	return &Error{"unknown_result", "未能确认提交结果；草稿已保留。请先在原串核对，避免重复发送"}
+	return &Error{"unknown_result", "未能确认提交结果；草稿已保留。请先在原站核对，避免重复发送"}
 }
 
 func hasAttr(n *html.Node, name string) bool {
@@ -178,11 +175,18 @@ type replyForm struct {
 func parseReplyForm(data []byte, page string, site string, d Draft) (replyForm, error) {
 	doc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
-		return replyForm{}, &Error{"response", "无法解析回复表单；尚未提交"}
+		return replyForm{}, &Error{"response", "无法解析发帖表单；尚未提交"}
 	}
 	target, body, action := "resto", "content", "/Home/Forum/doReplyThread.html"
 	if site == "bog" {
 		target, body, action = "res", "comment", "/post"
+	}
+	if d.ThreadID == 0 {
+		if site == "x" {
+			target, action = "fid", "/Home/Forum/doPostThread.html"
+		} else {
+			target = "forum"
+		}
 	}
 	var forms []*html.Node
 	walk(doc, func(n *html.Node) bool {
@@ -196,17 +200,17 @@ func parseReplyForm(data []byte, page string, site string, d Draft) (replyForm, 
 		return true
 	})
 	if len(forms) != 1 {
-		return replyForm{}, &Error{"response", "未找到唯一回复表单；串可能锁定、需要验证或页面已改版，尚未提交"}
+		return replyForm{}, &Error{"response", "未找到唯一发帖表单；串可能锁定、需要验证或页面已改版，尚未提交"}
 	}
 	form := forms[0]
 	if strings.ToLower(attr(form, "method")) != "post" {
-		return replyForm{}, &Error{"response", "回复表单方法已变化；尚未提交"}
+		return replyForm{}, &Error{"response", "发帖表单方法已变化；尚未提交"}
 	}
 	base, _ := url.Parse(page)
 	rel, _ := url.Parse(attr(form, "action"))
 	dest := base.ResolveReference(rel)
 	if dest.Scheme != base.Scheme || dest.Host != base.Host || dest.User != nil || dest.RawQuery != "" || dest.Fragment != "" {
-		return replyForm{}, &Error{"response", "回复表单目标不是当前站点；尚未提交"}
+		return replyForm{}, &Error{"response", "发帖表单目标不是当前站点；尚未提交"}
 	}
 	values := url.Values{}
 	hasBody, hasTitle, hasImage := false, false, false
@@ -217,7 +221,7 @@ func parseReplyForm(data []byte, page string, site string, d Draft) (replyForm, 
 			return true
 		}
 		if n.Data == "input" && strings.EqualFold(attr(n, "type"), "hidden") {
-			if name != "isManager" && name != "email" && name != "name" && name != "forum" && name != "fid" && name != "img" && name != "img[]" {
+			if name == target || (name != "isManager" && name != "email" && name != "name" && name != "forum" && name != "fid" && name != "img" && name != "img[]") {
 				values.Add(name, attr(n, "value"))
 			}
 		}
@@ -250,17 +254,41 @@ func parseReplyForm(data []byte, page string, site string, d Draft) (replyForm, 
 	if invalid != nil {
 		return replyForm{}, invalid
 	}
-	if !hasBody || len(values[target]) != 1 || values.Get(target) != strconv.Itoa(d.ThreadID) {
-		return replyForm{}, &Error{"response", "回复表单的主串编号不匹配；尚未提交"}
+	expected := d.ThreadID
+	if d.ThreadID == 0 {
+		expected = d.BoardID
+		if values.Has("res") || values.Has("resto") {
+			return replyForm{}, &Error{"response", "发串页面返回了回复表单；尚未提交"}
+		}
+		if site == "bog" {
+			// BOG's numeric forum value comes only from the selected board's
+			// own compose form. The local navigation hash is never sent.
+			parts := strings.Split(strings.Trim(base.Path, "/"), "/")
+			boardName := ""
+			walk(firstClass(form, "compose-title"), func(n *html.Node) bool {
+				if n.Data == "span" {
+					boardName = nodeText(n)
+					return false
+				}
+				return true
+			})
+			if len(parts) < 3 || parts[len(parts)-3] != "f" || parts[len(parts)-1] != "1" || boardName != parts[len(parts)-2] || bogBoardID(boardName) != d.BoardID {
+				return replyForm{}, &Error{"response", "BOG 发串表单的板块名称不匹配；尚未提交"}
+			}
+			expected, _ = strconv.Atoi(values.Get(target))
+		}
+	}
+	if !hasBody || expected <= 0 || len(values[target]) != 1 || values.Get(target) != strconv.Itoa(expected) {
+		return replyForm{}, &Error{"response", "发帖表单的目标编号不匹配；尚未提交"}
 	}
 	if site == "x" && (len(values["__hash__"]) != 1 || values.Get("__hash__") == "") {
-		return replyForm{}, &Error{"response", "回复表单缺少当前校验字段；尚未提交"}
+		return replyForm{}, &Error{"response", "发帖表单缺少当前校验字段；尚未提交"}
 	}
 	if site == "x" && len(d.Files) > 0 && !hasImage {
-		return replyForm{}, &Error{"response", "当前回复表单不接受图片；尚未提交"}
+		return replyForm{}, &Error{"response", "当前发帖表单不接受图片；尚未提交"}
 	}
 	if d.Title != "" && !hasTitle {
-		return replyForm{}, &Error{"invalid", "当前回复表单不接受标题；尚未提交"}
+		return replyForm{}, &Error{"invalid", "当前发帖表单不接受标题；尚未提交"}
 	}
 	values.Set(body, d.Body)
 	if hasTitle {
@@ -272,7 +300,7 @@ func parseReplyForm(data []byte, page string, site string, d Draft) (replyForm, 
 	return replyForm{fields: values, action: dest.String()}, nil
 }
 
-func (h *external) prepareReply(ctx context.Context, d Draft) (*replySession, replyForm, error) {
+func (h *external) prepareSubmission(ctx context.Context, d Draft, boards func(context.Context) ([]Board, error)) (*replySession, replyForm, error) {
 	if err := h.ValidateDraft(d); err != nil {
 		return nil, replyForm{}, err
 	}
@@ -281,6 +309,26 @@ func (h *external) prepareReply(ctx context.Context, d Draft) (*replySession, re
 		return nil, replyForm{}, err
 	}
 	page := h.replyBase() + "t/" + strconv.Itoa(d.ThreadID)
+	if d.ThreadID == 0 {
+		list, err := boards(ctx)
+		if err != nil {
+			return nil, replyForm{}, err
+		}
+		name := ""
+		for _, b := range list {
+			if b.ID == d.BoardID {
+				name = b.Key
+				if name == "" {
+					name = b.Name
+				}
+				break
+			}
+		}
+		if name == "" || name == "." || name == ".." {
+			return nil, replyForm{}, &Error{"invalid", "发串板块不存在；请重新选择板块"}
+		}
+		page = h.replyBase() + "f/" + url.PathEscape(name)
+	}
 	if h.site.ID == "bog" {
 		page += "/1"
 	}
@@ -309,13 +357,13 @@ func multipartReply(fields url.Values, path string) (*bytes.Buffer, string, erro
 		}
 		f, err := os.Open(path)
 		if err != nil {
-			return nil, "", &Error{"invalid", "无法打开回复图片"}
+			return nil, "", &Error{"invalid", "无法打开发帖图片"}
 		}
 		defer f.Close()
 		head := make([]byte, 512)
 		n, readErr := f.ReadAt(head, 0)
 		if readErr != nil && readErr != io.EOF {
-			return nil, "", &Error{"invalid", "无法读取回复图片"}
+			return nil, "", &Error{"invalid", "无法读取发帖图片"}
 		}
 		header := textproto.MIMEHeader{}
 		// Match browser multipart filenames (RFC 7578), including Chinese names.
@@ -328,7 +376,7 @@ func multipartReply(fields url.Values, path string) (*bytes.Buffer, string, erro
 		}
 		size, err := io.Copy(part, io.LimitReader(f, MaxFile+1))
 		if err != nil || size > MaxFile {
-			return nil, "", &Error{"invalid", "回复图片读取失败或超过 20 MB"}
+			return nil, "", &Error{"invalid", "发帖图片读取失败或超过 20 MB"}
 		}
 	}
 	if err := w.Close(); err != nil {
@@ -339,7 +387,7 @@ func multipartReply(fields url.Values, path string) (*bytes.Buffer, string, erro
 
 func (*xClient) InlineFiles() bool { return true }
 func (c *xClient) Publish(ctx context.Context, d Draft) error {
-	s, form, err := c.prepareReply(ctx, d)
+	s, form, err := c.prepareSubmission(ctx, d, c.Boards)
 	if err != nil {
 		return err
 	}
@@ -372,7 +420,7 @@ func xReplyResult(data []byte) error {
 		case strings.Contains(msg, "频繁") || strings.Contains(msg, "间隔"):
 			return &Error{"rate_limit", "X 岛限制发言频率，请稍后手动重试"}
 		default:
-			return &Error{"rejected", "X 岛拒绝了回复；请在原串网页检查锁定、版规、内容及图片限制"}
+			return &Error{"rejected", "X 岛拒绝了发帖；请在原站网页检查锁定、版规、内容及图片限制"}
 		}
 	}
 	if success := firstClass(doc, "success"); success != nil {
@@ -408,11 +456,11 @@ func bogWriteError(code int) error {
 	case 301, 302, 303, 304, 1005, 1008:
 		return &Error{"rejected", "BOG 拒绝了图片，请检查图片格式、大小、数量及图片发布权限"}
 	case 1101:
-		return &Error{"not_found", "BOG 回复目标不存在或已锁定"}
+		return &Error{"not_found", "BOG 发帖目标不存在或已锁定"}
 	case 1102:
-		return &Error{"duplicate", "BOG 提示近期发布过相同内容，请先核对原串"}
+		return &Error{"duplicate", "BOG 提示近期发布过相同内容，请先核对原站"}
 	case 1100, 1103, 1201:
-		return &Error{"rejected", "BOG 拒绝了回复，请在原站检查目标与内容"}
+		return &Error{"rejected", "BOG 拒绝了发帖，请在原站检查目标与内容"}
 	}
 	return unknownReply()
 }
@@ -447,9 +495,9 @@ func (c *bogClient) Upload(ctx context.Context, path string) (Media, error) {
 }
 func (c *bogClient) Publish(ctx context.Context, d Draft) error {
 	if len(d.Files) > 0 {
-		return &Error{"invalid", "BOG 图片须先上传再回复"}
+		return &Error{"invalid", "BOG 图片须先上传再发帖"}
 	}
-	s, form, err := c.prepareReply(ctx, d)
+	s, form, err := c.prepareSubmission(ctx, d, c.Boards)
 	if err != nil {
 		return err
 	}

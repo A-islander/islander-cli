@@ -23,8 +23,9 @@ func (m *model) openPostActions() {
 		{"r · 回复当前串", "post-action", "r"},
 		{"a · 查看这条帖子的附件", "post-action", "a"},
 		{"v · 原位展开 / 收起引用", "post-action", "v"},
-		{"s · SAGE", "post-action", "s"},
-		{"S · 反对 SAGE", "post-action", "S"},
+	}
+	if m.capabilities().Sage {
+		m.menu = append(m.menu, menuItem{"s · SAGE", "post-action", "s"}, menuItem{"S · 反对 SAGE", "post-action", "S"})
 	}
 	if m.capabilities().Manage && m.identity.Alias != "" && p.UserID == m.identity.ID {
 		m.menu = append(m.menu, menuItem{"x · 删除", "post-action", "x"}, menuItem{"X · 恢复", "post-action", "X"})
@@ -53,6 +54,7 @@ func (m *model) beginCompose(reply, quote bool) tea.Cmd {
 	if m.identity.Alias == "" {
 		m.notice = "请先导入或领取饼干"
 		m.openCookies()
+		m.cookieNotice = "没有饼干，无法发串/回复串\n请先导入或选择当前岛的饼干。"
 		return nil
 	}
 	d := forum.Draft{Cookie: m.identity.Alias}
@@ -101,6 +103,7 @@ func (m *model) saveDraft() error {
 	return m.store.SaveDraft(&m.draft)
 }
 func (m *model) openCookies() {
+	m.cookieNotice = ""
 	m.menu = nil
 	if m.store != nil {
 		v, e := m.store.Read()
@@ -369,6 +372,9 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	if cmd, handled := m.attachmentUpdate(msg); handled {
 		return *m, cmd, true
 	}
+	if cmd, handled := m.paginationInput(msg); handled {
+		return *m, cmd, true
+	}
 	if _, ok := msg.(startMsg); ok {
 		cmd := m.initialLoad()
 		return *m, cmd, true
@@ -424,6 +430,14 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.busy = false
 		if r.Err != nil {
+			if r.Kind == "pagination" {
+				v := r.Value.(paginationResult)
+				if v.extend {
+					m.activeWindow().blocked[v.page.Page] = true
+				}
+				m.notice = "翻页失败：" + forum.Clean(r.Err.Error()) + " · [ ] 或 P 手动重试"
+				return *m, nil, true
+			}
 			if m.pendingRestore != nil && (r.Kind == "list" || r.Kind == "resume-thread") {
 				m.pendingRestore = nil
 				m.stateReady = false
@@ -444,6 +458,8 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			return *m, nil, true
 		}
 		switch r.Kind {
+		case "pagination":
+			m.applyPagination(r.Value.(paginationResult))
 		case "initial":
 			v := r.Value.(initialResult)
 			m.apiBoards = v.Boards
@@ -579,8 +595,13 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return *m, m.updateFileBrowser(k), true
 	}
+	if m.modal == "kaomoji" {
+		return *m, m.updateKaomoji(k), true
+	}
 	if m.modal == "compose" {
 		switch k {
+		case "f3":
+			return *m, m.openKaomoji(), true
 		case "ctrl+c", "ctrl+s":
 			if e := m.saveDraft(); e != nil {
 				m.notice = e.Error()
@@ -840,19 +861,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		if k == "[" {
 			delta = -1
 		}
-		if m.reading && m.current() != nil {
-			t := m.current()
-			p := m.pages[t.id]
-			page := p.Page + delta
-			if page >= 1 && (delta < 0 || p.HasMore) {
-				m.offsets[t.id] = 0
-				return *m, m.loadThread(t.id, page, 0), true
-			}
-		} else {
-			page := m.page + delta
-			if page >= 1 && (delta < 0 || m.listPage.HasMore) {
-				return *m, m.loadList(page), true
-			}
+		p := m.currentPage()
+		page := p.Page + delta
+		if page >= 1 && (delta < 0 || p.HasMore) {
+			return *m, m.requestPage(page, false, delta, k, false), true
 		}
 		return *m, nil, true
 	case "ctrl+r":
@@ -933,6 +945,12 @@ func (m model) extendedDialog() (string, bool) {
 	iw := w - 6
 	var content string
 	switch m.modal {
+	case "page-jump":
+		content = m.pageJumpContent(iw)
+	case "kaomoji":
+		w = min(112, m.width-6)
+		iw = w - 6
+		content = m.kaomojiContent(iw)
 	case "filepicker":
 		content = m.fileBrowserContent(iw)
 	case "compose":
@@ -940,7 +958,7 @@ func (m model) extendedDialog() (string, bool) {
 		if m.draft.ThreadID > 0 {
 			target = fmt.Sprintf("回复 No.%d", m.draft.ThreadID)
 		}
-		content = strong(target+" · "+m.identity.Alias, teal) + "\n" + ink("Tab 标题/正文 · Ctrl+A 附件 · Ctrl+P 预览", muted) + "\n\n"
+		content = strong(target+" · "+m.identity.Alias, teal) + "\n" + ink("F3 颜文字 · Ctrl+A 附件 · Ctrl+P 预览", muted) + "\n\n"
 		if m.draft.ThreadID == 0 {
 			content += m.titleInput.View() + "\n\n"
 		}
@@ -952,6 +970,11 @@ func (m model) extendedDialog() (string, bool) {
 	case "menu":
 		content = strong(m.returnModal, teal) + "\n\n"
 		capacity := max(1, m.height-12)
+		if m.cookieNotice != "" && strings.HasPrefix(m.returnModal, "饼干 ·") {
+			note := bodyText(m.cookieNotice, iw)
+			content += ink(note, sand) + "\n\n"
+			capacity = max(1, capacity-lipgloss.Height(note)-1)
+		}
 		start := max(0, m.menuIndex-capacity+1)
 		for i := start; i < min(len(m.menu), start+capacity); i++ {
 			s := "  " + clip(m.menu[i].Label, iw-2)
@@ -976,13 +999,16 @@ func (m model) extendedDialog() (string, bool) {
 	case "attachment":
 		content = strong("附件", teal) + "\n\n" + bodyText(m.menu[m.menuIndex].Value, iw) + "\n\n" + ink("Enter 终端预览 · o 系统打开 · s 下载 · Esc 返回", sand)
 	case "live-help":
-		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串、帖子和引用 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F2 编辑历史 · Tab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
-		if !m.capabilities().Publish {
+		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F3 颜文字 · F2 编辑历史\nTab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		if !m.capabilities().Manage {
 			replyHelp := "发帖、我的内容及管理操作尚未接入。"
 			if m.capabilities().Reply {
-				replyHelp = "r 回复 · R 引用回复 · d 草稿\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n新主串、我的内容及管理操作尚未接入。"
+				replyHelp = "r 回复 · R 引用回复 · d 草稿\nF3 颜文字 · F2 编辑历史\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n新主串、我的内容及管理操作尚未接入。"
 			}
-			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串、帖子和引用 · Enter 阅读/操作\nn/p 上下楼 · PgUp/PgDn 滚动\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
+			if m.capabilities().Publish {
+				replyHelp = "c 发串 · r 回复 · R 引用回复 · d 草稿\nF3 颜文字 · F2 编辑历史\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n我的内容及管理操作尚未接入。"
+			}
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
 		}
 	default:
 		return "", false

@@ -47,7 +47,7 @@ func Run(o Options) error {
 	final, err := tea.NewProgram(m).Run()
 	if last, ok := final.(model); ok {
 		last.flushPersistence()
-		if !last.busy && (last.modal == "compose" || last.modal == "filepicker") {
+		if !last.busy && (last.modal == "compose" || last.modal == "filepicker" || last.modal == "kaomoji") {
 			if saveErr := last.saveDraft(); saveErr != nil {
 				last.stateError = saveErr.Error()
 			}

@@ -21,7 +21,8 @@ type bogClient struct {
 }
 
 // BOG web navigation exposes names, not numeric API forum IDs. These stable
-// local navigation IDs are never sent to a BOG API or used for publishing.
+// local navigation IDs are never sent to a BOG API. Publishing resolves the
+// selected name to the numeric forum value in its current web form.
 func bogBoardID(name string) int { return int(crc32.ChecksumIEEE([]byte(name)) & 0x7fffffff) }
 
 func bogBoards(doc *html.Node) ([]Board, error) {
