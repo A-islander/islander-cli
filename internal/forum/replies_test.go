@@ -88,8 +88,8 @@ func TestXReplyUsesFreshFormSessionAndAtomicImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Capabilities().CanPublish(true) || c.Capabilities().CanPublish(false) {
-		t.Fatal("reply capability not independent")
+	if !c.Capabilities().CanPublish(true) || !c.Capabilities().CanPublish(false) {
+		t.Fatal("external publishing capabilities missing")
 	}
 	err = c.Publish(context.Background(), Draft{ThreadID: 100, Body: ">>No.101\n正文 & = +", Files: []string{replyPNG(t)}})
 	if err != nil {

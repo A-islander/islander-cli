@@ -73,7 +73,7 @@ func TestSiteSelectionAndExplicitReadIdentity(t *testing.T) {
 }
 
 func TestExternalWritesFailBeforePreviewOrAuthentication(t *testing.T) {
-	for _, command := range [][]string{{"thread", "create"}, {"post", "sage", "100"}, {"cookie", "register", "daily"}} {
+	for _, command := range [][]string{{"post", "sage", "100"}, {"cookie", "register", "daily"}} {
 		a := &app{}
 		cmd := a.root()
 		cmd.SetArgs(append([]string{"--site", "bog", "--data-dir", t.TempDir()}, command...))
@@ -117,16 +117,18 @@ func TestExternalReplyPreviewDoesNotSendRequests(t *testing.T) {
 				t.Fatal(err)
 			}
 			base := []string{"--site", site, "--forum-url", server.URL, "--data-dir", dir, "--cookie", "daily", "reply", "create", "--thread", "100", "--quote", "101", "--body-file", body}
-			for _, flags := range [][]string{{"--dry-run"}, {"--confirm", "wrong-confirmation"}} {
-				a := &app{}
-				cmd := a.root()
-				cmd.SetArgs(append(append([]string{}, base...), flags...))
-				err := cmd.Execute()
-				if flags[0] == "--dry-run" && err != nil {
-					t.Fatal(err)
-				}
-				if flags[0] == "--confirm" && (err == nil || !strings.Contains(err.Error(), "确认码")) {
-					t.Fatal("incorrect confirmation not rejected")
+			for _, base := range [][]string{base, {"--site", site, "--forum-url", server.URL, "--data-dir", dir, "--cookie", "daily", "thread", "create", "--board", "1", "--body-file", body}} {
+				for _, flags := range [][]string{{"--dry-run"}, {"--confirm", "wrong-confirmation"}} {
+					a := &app{}
+					cmd := a.root()
+					cmd.SetArgs(append(append([]string{}, base...), flags...))
+					err := cmd.Execute()
+					if flags[0] == "--dry-run" && err != nil {
+						t.Fatal(err)
+					}
+					if flags[0] == "--confirm" && (err == nil || !strings.Contains(err.Error(), "确认码")) {
+						t.Fatal("incorrect confirmation not rejected")
+					}
 				}
 			}
 			if requests != 0 {

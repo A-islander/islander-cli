@@ -27,6 +27,9 @@ func TestExternalQuoteReplyComposerAndPreview(t *testing.T) {
 			m = press(m, "enter")
 			found := false
 			for i, item := range m.menu {
+				if item.Value == "s" || item.Value == "S" || item.Value == "x" || item.Value == "X" {
+					t.Fatal("enabling new threads exposed unsupported management actions")
+				}
 				if item.Value == "R" {
 					m.menuIndex = i
 					found = true
@@ -49,8 +52,17 @@ func TestExternalQuoteReplyComposerAndPreview(t *testing.T) {
 				t.Fatal("preview did not persist external reply")
 			}
 			m.modal = ""
-			if m.beginCompose(false, false) != nil || m.modal == "compose" {
-				t.Fatal("new-thread capability accidentally enabled")
+			m.apiBoards = []forum.Board{{ID: 4, Name: "综合版"}}
+			m.board = 1
+			m.reading = false
+			m = press(m, "c")
+			if m.modal != "compose" || m.draft.ThreadID != 0 || m.draft.BoardID != 4 {
+				t.Fatal("c did not open new-thread composer in selected board")
+			}
+			m.editor.SetValue("新串草稿")
+			m.preview()
+			if m.modal != "publish" || !strings.Contains(m.popup.GetContent(), "综合版") {
+				t.Fatal("new-thread preview missing target board")
 			}
 			m.identity = local.Cookie{}
 			m.beginCompose(true, false)

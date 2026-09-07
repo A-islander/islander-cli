@@ -18,6 +18,7 @@ type readerItem struct {
 	key               string
 	post              post
 	root, depth, line int
+	end               int // Exclusive end of this post, before child quotes and separators.
 }
 type inlineQuoteResult struct {
 	parent string
@@ -68,10 +69,29 @@ func (m *model) moveReaderItem(delta int) {
 			break
 		}
 	}
-	item := m.readerItems[max(0, min(len(m.readerItems)-1, index+delta))]
+	current := m.readerItems[index]
+	offset := m.reader.YOffset()
+	if delta > 0 && offset+m.reader.Height() < current.end {
+		m.reader.SetYOffset(offset + 1)
+		return
+	}
+	if delta < 0 && offset > current.line {
+		m.reader.SetYOffset(max(current.line, offset-1))
+		return
+	}
+	next := max(0, min(len(m.readerItems)-1, index+delta))
+	if next == index {
+		return
+	}
+	item := m.readerItems[next]
 	m.setReaderItem(item)
 	m.refreshReader(false)
-	m.reader.SetYOffset(item.line)
+	offset = item.line
+	if delta < 0 {
+		// Re-enter a long previous post at its bottom, then read upwards.
+		offset = max(item.line, item.end-m.reader.Height())
+	}
+	m.reader.SetYOffset(offset)
 }
 
 func (m *model) returnToQuoteParent() bool {

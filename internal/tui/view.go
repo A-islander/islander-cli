@@ -121,15 +121,20 @@ func (m *model) threadContent(t thread) string {
 	var render func(post, string, int, int, string, string)
 	render = func(p post, key string, root, depth int, title, failure string) {
 		start := len(lines)
+		itemIndex := len(m.readerItems)
 		m.readerItems = append(m.readerItems, readerItem{key: key, post: p, root: root, depth: depth, line: start})
 		indent := strings.Repeat("  ", min(depth, 4))
 		w := max(1, m.reader.Width()-2-len(indent))
 		floor := fmt.Sprintf("%02d 楼", root)
 		if page, ok := m.pages[t.id]; ok {
+			index := root
+			if pos, exists := m.threadWindow.positions[p.id]; exists {
+				page, index = m.threadWindow.pages[pos.page], pos.index
+			}
 			if page.Offset < 0 {
-				floor = fmt.Sprintf("本页 %d", root+1)
+				floor = fmt.Sprintf("第%d页 · 本页 %d", page.Page, index+1)
 			} else {
-				floor = fmt.Sprintf("%02d 楼", page.Offset+root)
+				floor = fmt.Sprintf("%02d 楼", page.Offset+index)
 			}
 		}
 		isOP := root == 0
@@ -180,6 +185,7 @@ func (m *model) threadContent(t thread) string {
 			}
 			lines[n] = indent + prefix + lines[n]
 		}
+		m.readerItems[itemIndex].end = len(lines)
 		lines = append(lines, "")
 		for _, child := range m.inlineQuotes[key] {
 			render(child.post, fmt.Sprintf("%s/%d", key, child.post.id), root, depth+1, "", child.err)
@@ -195,8 +201,12 @@ func (m *model) threadContent(t thread) string {
 		lines = append(lines, ink(strings.Repeat("─", max(1, m.reader.Width()-2)), lineColor), "")
 	}
 	end := "已经读到串尾了。慢慢来，岛一直在。"
-	if page, ok := m.pages[t.id]; ok && page.HasMore {
-		end = "本页已读完 · 按 ] 继续下一页"
+	page, ok := m.pages[t.id]
+	if m.threadWindow.last > 0 {
+		page, ok = m.threadWindow.pages[m.threadWindow.last]
+	}
+	if ok && page.HasMore {
+		end = "继续向下自动加载 · ] 下一页 · P 跳页"
 	}
 	if !m.opts.Demo {
 		if _, ok := m.pages[t.id]; !ok {
@@ -276,10 +286,14 @@ func (m model) readerPanel() string {
 	}
 	position := fmt.Sprintf("%02d / %02d 楼", m.activePost, len(t.posts)-1)
 	if page, ok := m.pages[t.id]; ok {
+		index := m.activePost
+		if pos, exists := m.threadWindow.positions[t.posts[m.activePost].id]; exists {
+			page, index = m.threadWindow.pages[pos.page], pos.index
+		}
 		if page.Offset < 0 {
-			position = fmt.Sprintf("本页 %d/%d · %d页", m.activePost+1, len(t.posts), page.Page)
+			position = fmt.Sprintf("本页 %d · %d页 · P 跳页", index+1, page.Page)
 		} else {
-			position = fmt.Sprintf("%d/%d楼 · %d页", page.Offset+m.activePost, max(0, page.Count-1), page.Page)
+			position = fmt.Sprintf("%d/%d楼 · %d页 · P 跳页", page.Offset+index, max(0, page.Count-1), page.Page)
 		}
 	}
 	if !m.opts.Demo && !m.reading {
@@ -326,7 +340,7 @@ func (m model) dialog() string {
 		content = strong(title, teal) + "\n\n" + ink(ansi.Wrap(hint, iw, ""), muted) + "\n\n" + m.input.View() + "\n\n" + ink("Enter 确定 · Esc 取消", muted)
 	}
 	if m.modal == "help" && m.height < 28 {
-		content = strong("上岛指南", teal) + "\n\n↑↓ / jk 选串、选楼\nEnter / Tab 阅读、切换\nEsc 返回 · n/p 换楼 · v 引用\n1—5 板块 · / 筛选 · : 定位\nf 布局 · PgUp/PgDn 滚动\nq 退出 · Esc 关闭帮助"
+		content = strong("上岛指南", teal) + "\n\n↑↓ / jk 选串、逐行读长楼\nEnter / Tab 阅读、切换\nEsc 返回 · n/p 换楼 · v 引用\n1—5 板块 · / 筛选 · : 定位\nf 布局 · PgUp/PgDn 滚动\nq 退出 · Esc 关闭帮助"
 	}
 	h := min(m.height-4, lipgloss.Height(content)+4)
 	return panel("\n"+content, w, h, true)
@@ -378,12 +392,15 @@ func (m model) View() tea.View {
 	} else {
 		body = m.listPanel()
 	}
-	help := "g 切站  b 板块  H 历史  F 收藏  * 收藏/取消  Enter 阅读  a 图片  ? 帮助"
+	help := "b 板块  P 跳页  H 历史  F 收藏  Enter 阅读  a 图片  ? 帮助"
 	if m.reading {
-		help = "b 板块  H 历史  F 收藏  * 收藏/取消  a 图片  r 回复 R 引用  Enter 操作  ? 帮助"
+		help = "b 板块  P 跳页  H 历史  F 收藏  a 图片  r 回复 R 引用  Enter 操作  ? 帮助"
 	}
 	if m.width < 80 {
-		help = "b 板块 H 历史 F 收藏 a 图片 ? 帮助"
+		help = "b 板块 P 跳页 H 历史 F 收藏 ? 帮助"
+	}
+	if !m.reading && m.capabilities().Publish {
+		help = "c 发串  " + help
 	}
 	notice := m.notice
 	if m.busy {

@@ -27,6 +27,13 @@ func TestVisibleFloorSelection(t *testing.T) {
 	for _, width := range []int{120, 60, 44} {
 		m := newModel()
 		m.resize(width, 24)
+		// This test covers quick selection of posts that fit on one screen.
+		m.current().title = ""
+		for i := range m.current().posts {
+			m.current().posts[i].body = "短回复"
+			m.current().posts[i].attachment = ""
+			m.current().posts[i].quote = 0
+		}
 		m = press(m, "enter")
 		assertSelectedPost(t, m, m.current().posts[0].id)
 		for _, key := range []string{"down", "j", "n"} {

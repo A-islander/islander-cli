@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.3**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.4**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.3
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.4
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.3-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.3-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.3-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.3-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.3-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.3-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.4-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.4-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.4-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.4-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.4-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.4-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.3-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.4-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.3-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.3-linux-x86_64.AppImage
-./islander-v0.0.3-linux-x86_64.AppImage
-./islander-v0.0.3-linux-x86_64.AppImage --version
-./islander-v0.0.3-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.4-linux-x86_64.AppImage
+./islander-v0.0.4-linux-x86_64.AppImage
+./islander-v0.0.4-linux-x86_64.AppImage --version
+./islander-v0.0.4-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -109,7 +109,7 @@ islander --site bog tui
 
 宽屏列表右侧自动显示主楼及第一页最多五条回复摘要；选串停留片刻后加载，快速移动时取消旧请求。长内容和更多回复按 `Enter` 阅读完整串，预览不改变已保存的阅读位置。
 
-TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛并恢复每岛阅读位置；首次启动及普通 CLI 默认仍为岛民岛。
+TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`P` 按页码跳转，边界处继续浏览可自动加载相邻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛并恢复每岛阅读位置；首次启动及普通 CLI 默认仍为岛民岛。
 
 CLI 使用同一个 `--site` 参数，输出保留原有 `schemaVersion` / `data`，另附 `site` 来源字段：
 
@@ -124,7 +124,7 @@ islander --site bog thread get 1423209 --page 2
 islander --site bog post get 1526630
 ```
 
-v0.0.2 的外站能力为浏览。v0.0.3 已接入 X 岛 / BOG 的回复、引用回复和回复图片；新主串、我的内容、SAGE、删除恢复和领取饼干尚未接入。`site info` 返回已实现的能力；不支持的 CLI 操作返回 `unsupported`，TUI 隐藏相应菜单。下文发串与管理说明适用于岛民岛。
+v0.0.2 的外站能力为浏览。v0.0.3 已接入 X 岛 / BOG 的回复、引用回复和回复图片；v0.0.4 另外接入了两站的新主串。外站我的内容、SAGE、删除恢复和领取饼干尚未接入。`site info` 返回已实现的能力；不支持的 CLI 操作返回 `unsupported`，TUI 隐藏相应菜单。发串支持三个站点；管理操作仍仅适用于岛民岛。
 
 X 岛使用 JSON API；BOG 的板块和串分页解析公开网页，引用读取 JSON。总数未知时 `count=-1`，楼层偏移未知时 `offset=-1`；按 `hasMore` 判断能否继续。BOG 板块 `key` 为原始名称，`id` 是稳定的本地导航编号，不能用于 BOG 的发帖 API。`--board` 可直接使用名称。X 岛的 `post get` 返回 `parentUnknown=true` 表示引用接口没有父串信息；`thread get` 和 TUI 的编号跳转应提供主串编号。
 
@@ -151,7 +151,7 @@ X 输入 `userhash` 的值，保留百分号编码；导入时只读检查受限
 
 ## X 岛 / BOG 回复
 
-从 v0.0.3 起，先按 `g` 切岛、`i` 导入或选择该岛饼干，然后打开主串：`r` 回复，`R` 引用选中帖子；`Ctrl+A` 选择图片，`Ctrl+P` 预览站点、身份、目标和正文，Enter 确认提交。外站新主串仍不支持，`site info` 用独立的 `reply: true / publish: false` 表示。
+从 v0.0.3 起，先按 `g` 切岛、`i` 导入或选择该岛饼干，然后打开主串：`r` 回复，`R` 引用选中帖子；`Ctrl+A` 选择图片，`Ctrl+P` 预览站点、身份、目标和正文，Enter 确认提交。v0.0.3 的外站能力为 `reply: true / publish: false`。v0.0.4 两项均为 `true`：按 `b` 选择具体板块，再按 `c` 发串；没有饼干时，饼干弹窗顶部会说明无法发串/回复，并提示导入或选择。CLI 使用 `board list` 中的编号运行 `thread create --board 编号 --cookie 别名 --body-file 正文文件`，先预览，再带确认码提交。详见 [外站发串规格](docs/specs/external-threads.md)。
 
 CLI 示例（替换为你要回复的真实主串和引用编号）：
 
@@ -169,6 +169,8 @@ X 回复先读取目标网页的最新表单与校验字段，再提交正文和
 
 ## 常用按键
 
+v0.0.4 修复长回复的 `j/k` 阅读，并新增编辑器 **`F3` 颜文字选择器**。选择器每行四个，用方向键 / `hjkl` 选择，Tab / Shift+Tab 选择下一个 / 上一个，Enter 在正文或标题的当前光标处插入，Esc 取消返回；按 Web / Flutter 原顺序收录 99 个颜文字，不附分类或说明；BOG 岛直接使用 Web 的方括号版本列表；插入后自动保存。见 [交互规格](docs/specs/reader-scroll-kaomoji.md)。
+
 v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问的岛及阅读位置，`--site` 可显式覆盖；普通 CLI 的默认站点仍是岛民岛。
 
 按 **`H` 查看当前岛 / 当前身份的浏览历史**，`/` 筛选，Enter 继续阅读，`x` 删除。菜单可清空或暂停记录；每份历史最多 500 条，保留 90 天。编辑时自动保存，**`F2` 查看和恢复最近 20 个编辑快照**。历史和草稿分别保存，清空历史不会删草稿。附件仍是原文件路径或已上传链接，不是文件备份。
@@ -177,16 +179,20 @@ v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问
 
 数据根目录为 Linux 的 `~/.config/islander/`（支持 `XDG_CONFIG_HOME`）、macOS 的 `~/Library/Application Support/islander/`、Windows 的 `%AppData%/islander/`，也可用 `--data-dir` 指定。根目录的 `preferences.json` 保存当前岛，各站哈希目录的 `browsing.json` 保存导航、历史和收藏，`draft-*.json` 保存草稿与快照。完整规则见 [状态持久化 spec](docs/specs/persistent-forum-state.md)。
 
+鼠标模式支持滚轮浏览、自动加载相邻页和部分顶部按钮点击。编辑器可用 `Shift+方向键` 选中文本、`Ctrl+G` 全选、`Ctrl+Shift+C` 复制选区、`Ctrl+V` 粘贴到光标处；复制粘贴依赖终端/系统剪贴板支持，若快捷键被终端截获，按终端配置执行。论坛正文尚无应用内鼠标选区复制功能。
+
 顶部常驻 **`m 我的内容`** 按钮，可鼠标点击或按 `m` 打开当前饼干的发串与回复列表。访客会先进入饼干选择，选择／导入后继续打开。页面显示饼干别名；选中回复后按 `Enter` 定位原串，`Esc` 返回原来的列表位置。`[` / `]` 翻页，`i` 切换饼干。
 
-阅读区用 `›`、标题底色和正文左侧竖线标记当前选中的楼层。用 `↑↓ / j k` 或 `n/p` 换楼；长正文用 `PgUp/PgDn` 或空格滚动。按 `Enter` 打开选中帖子的操作菜单，引用、SAGE、附件和删除等操作均针对该楼层，菜单和确认页会显示目标编号。
+v0.0.4 支持连续浏览：读到已加载内容底部继续按 `j/↓`、滚轮或 PgDn，自动接上下一页；回到顶部继续向上可补载上一页，保留已有内容并去重。`n/p` 直接换楼也可跨页。`P` 打开页码输入，显示当前页与已知总页数；总数未知时明确标注。窗口内 `Ctrl+Home` 首页，已知总数时 `Ctrl+End` 末页、串内 `Ctrl+L` 最新回复。加载失败保留原位置，用 `[ ]` 或 `P` 手动重试；本地筛选或页内最新排序时暂停列表自动加载。详见 [翻页规格](docs/specs/continuous-pagination.md)。
+
+阅读区用 `›`、标题底色和正文左侧竖线标记当前选中的楼层。用 `↑↓ / j k` 浏览：当前楼层超出屏幕时逐行滚动，尾部完整显示后才进入下一条；向上返回长楼层时从尾部继续往上读。`n/p` 直接跳原串楼层；`PgUp/PgDn` 或空格可快速滚动。按 `Enter` 打开选中帖子的操作菜单，引用、SAGE、附件和删除等操作均针对该楼层，菜单和确认页会显示目标编号。
 
 按 `v` 在帖子下方原位展开引用，多条引用会一起列出。用 `↓` 选中展开的引用，再按 `v` 可继续查看它的引用；选中父帖按 `v` 收起该分支，`Esc / ← / h` 从引用返回上层并恢复阅读位置。`↑↓ / j k` 遍历正文及展开的引用，`n/p` 只切换原串楼层。选中引用时，`R` 引用该帖并回复当前串，SAGE 和附件操作也对应选中的引用。循环引用不继续展开，最多展开 12 层。
 
 | 按键 | 操作 |
 |---|---|
 | `g` | 切换岛民岛、X 岛、BOG；当前功能以站点能力为准 |
-| `↑↓` / `j k` | 列表选串；阅读区选择帖子及展开的引用 |
+| `↑↓` / `j k` | 列表选串；阅读区先滚动当前长帖或引用，读完再换条 |
 | `Enter` | 进入串详情；阅读时打开选中帖子的操作菜单 |
 | `PgUp/PgDn` / 空格 | 滚动正文和原位引用；发布预览仍可用 `↑↓` 滚动 |
 | `Esc` / `h` / `←` | 引用返回上层；原串返回列表，保留阅读位置 |
@@ -195,7 +201,9 @@ v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问
 | `v` | 原位展开／收起选中帖子的引用，支持继续展开嵌套引用 |
 | `:` | 按主楼或回复编号定位 |
 | `[` / `]` | 前一页／后一页，页码从 1 开始 |
+| `P` | 输入页码跳转，支持列表与串内 |
 | `b` | 全部、各板块、SAGE、我的内容 |
+| `F3`（编辑时） | 打开颜文字选择器，在当前光标处插入 |
 | `H` / `F` | 当前岛与身份的历史 / 收藏（v0.0.3 起） |
 | `*` | 收藏 / 取消收藏当前主串（v0.0.3 起） |
 | `m` / 点击顶部「我的内容」 | 直接打开当前饼干的发串与回复列表 |
@@ -309,20 +317,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.3
+make release VERSION=v0.0.4
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.3 --arch aarch64
+python3 scripts/package.py --version v0.0.4 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.3 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.3 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.4 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.4 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

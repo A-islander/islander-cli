@@ -25,6 +25,11 @@ type model struct {
 	favoriteEntries                             []local.HistoryEntry
 	attachmentDirect                            bool
 	draftEdits                                  []forum.Draft
+	kaomojiSelected                             int
+	kaomojiError                                string
+	cookieNotice                                string
+	listWindow, threadWindow                    pageWindow
+	pageJumpError                               string
 	attachment                                  attachmentView
 	jumpSource                                  *thread
 	opts                                        Options
