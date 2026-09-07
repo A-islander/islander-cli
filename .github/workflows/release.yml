@@ -76,6 +76,7 @@ jobs:
         run: |
           extra=()
           if [[ "$RELEASE_OS" == linux ]]; then extra+=(--appimage); fi
+          if [[ "$RELEASE_OS" == macos ]]; then extra+=(--dmg); fi
           python scripts/package.py --version "$RELEASE_VERSION" --os "$RELEASE_OS" --arch "$RELEASE_ARCH" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         with:
@@ -110,5 +111,6 @@ jobs:
           test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 4
           test "$(find . -maxdepth 1 -name '*.zip' | wc -l)" -eq 2
           test "$(find . -maxdepth 1 -name '*.exe' | wc -l)" -eq 2
-          sha256sum -- *.tar.gz *.AppImage *.zip *.exe > SHA256SUMS
-          gh release create "$RELEASE_VERSION" --verify-tag --title "Islander $RELEASE_VERSION" --notes-file "../docs/releases/$RELEASE_VERSION.md" *.tar.gz *.AppImage *.zip *.exe SHA256SUMS
+          test "$(find . -maxdepth 1 -name '*.dmg' | wc -l)" -eq 2
+          sha256sum -- *.tar.gz *.AppImage *.zip *.exe *.dmg > SHA256SUMS
+          gh release create "$RELEASE_VERSION" --verify-tag --title "Islander $RELEASE_VERSION" --notes-file "../docs/releases/$RELEASE_VERSION.md" *.tar.gz *.AppImage *.zip *.exe *.dmg SHA256SUMS

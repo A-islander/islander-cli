@@ -1,0 +1,49 @@
+name: macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release to package
+        required: true
+        default: v0.0.2
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+          - arch: aarch64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Download and verify released binary, build and mount DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_ARCH: ${{ matrix.arch }}
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          mkdir -p .local/macos-source
+          archive="islander-$RELEASE_VERSION-macos-$RELEASE_ARCH.tar.gz"
+          gh release download "$RELEASE_VERSION" --pattern "$archive" --pattern SHA256SUMS --dir .local/macos-source
+          python scripts/package_macos.py --version "$RELEASE_VERSION" --arch "$RELEASE_ARCH" --archive ".local/macos-source/$archive" --checksums .local/macos-source/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 7

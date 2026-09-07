@@ -41,6 +41,7 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 | Linux 压缩包 | `islander-v0.0.2-linux-x86_64.tar.gz` |
 | Linux AppImage | `islander-v0.0.2-linux-x86_64.AppImage` |
 | macOS 压缩包 | `islander-v0.0.2-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.2-macos-x86_64.dmg` |
 | Windows 压缩包 | `islander-v0.0.2-windows-x86_64.zip` |
 | Windows 可执行文件 | `islander-v0.0.2-windows-x86_64.exe` |
 
@@ -65,7 +66,7 @@ chmod +x islander-v0.0.2-linux-x86_64.AppImage
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
 
-macOS 下载对应架构的 `macos` 压缩包，解压后在 Ghostty 或 Terminal 中运行 `./islander tui`。AppImage 仅适用于 Linux。macOS 包未做 Apple Developer ID 签名或公证。
+macOS 可下载对应架构的 DMG，将 `Islander.app` 拖入 Applications，双击后在 Terminal 中启动 TUI；首次启动可能需要允许控制 Terminal。也可下载 `macos` 压缩包，解压后在 Ghostty 或 Terminal 中运行 `./islander tui`。AppImage 仅适用于 Linux。macOS 包未做 Apple Developer ID 签名或公证。
 
 Windows 推荐下载 ZIP，解压后在 Windows Terminal / PowerShell 中运行：
 
@@ -296,4 +297,6 @@ python3 scripts/package.py --version v0.0.2 --os macos --arch aarch64
 python3 scripts/package.py --version v0.0.2 --os windows --arch x86_64
 ```
 
-推送 `v*` 标签会触发 GitHub Actions：在三个系统的两个架构上测试、构建并验证版本及启动入口，全部成功后发布四个 tar.gz、两个 AppImage、两个 ZIP、两个 EXE 和校验文件。发布说明取自 `docs/releases/<版本>.md`。发布包只包含可执行文件、说明及必要的桌面资源。
+macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。
+
+推送 `v*` 标签会触发 GitHub Actions：在三个系统的两个架构上测试、构建并验证版本及启动入口，全部成功后发布四个 tar.gz、两个 AppImage、两个 DMG、两个 ZIP、两个 EXE 和校验文件。发布说明取自 `docs/releases/<版本>.md`。发布包只包含可执行文件、说明及必要的桌面资源。

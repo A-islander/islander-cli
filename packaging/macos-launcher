@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+resources=$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd)
+case "${1:-}" in
+    --version|--help) exec "$resources/islander" "$@" ;;
+esac
+exec /usr/bin/osascript - "$resources/islander" <<'APPLESCRIPT'
+on run argv
+    set clientPath to item 1 of argv
+    tell application "Terminal"
+        do script (quoted form of clientPath & " tui")
+        activate
+    end tell
+end run
+APPLESCRIPT

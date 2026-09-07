@@ -13,6 +13,8 @@ import tempfile
 import urllib.request
 import zipfile
 
+from package_macos import build_dmg
+
 REPO = Path(__file__).resolve().parents[1]
 ARCHES = {'x86_64': 'amd64', 'aarch64': 'arm64'}
 SYSTEMS = {'linux': 'linux', 'macos': 'darwin', 'windows': 'windows'}
@@ -71,6 +73,7 @@ def main():
     parser.add_argument('--os', choices=SYSTEMS, default=host_os())
     parser.add_argument('--arch', choices=ARCHES, default=host_arch())
     parser.add_argument('--appimage', action='store_true', help='同时构建 AppImage，需要本机架构 Linux')
+    parser.add_argument('--dmg', action='store_true', help='同时构建 DMG，需要本机架构 macOS')
     args = parser.parse_args()
     if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', args.version):
         parser.error('发布版本必须形如 v0.0.1 或 v0.0.1-rc.1')
@@ -82,6 +85,8 @@ def main():
         parser.error('AppImage 必须在对应架构的 Linux 上构建')
     if args.appimage and not shutil.which('desktop-file-validate'):
         parser.error('AppImage 构建需要 desktop-file-validate（Debian/Ubuntu: desktop-file-utils）')
+    if args.dmg and (args.os != 'macos' or host_os() != 'macos' or host_arch() != args.arch):
+        parser.error('DMG 必须在对应架构的 macOS 上构建')
     output = REPO / 'dist'
     output.mkdir(exist_ok=True)
     build_root = REPO / '.local/release-build'
@@ -92,6 +97,8 @@ def main():
         outputs.append(output / (name + '.exe'))
     if args.appimage:
         outputs.append(output / (name + '.AppImage'))
+    if args.dmg:
+        outputs.append(output / (name + '.dmg'))
     if any(p.exists() for p in outputs):
         parser.error('目标产物已存在；请先移动旧文件，避免覆盖已发布版本')
     env = dict(os.environ, CGO_ENABLED='0', GOOS=SYSTEMS[args.os], GOARCH=ARCHES[args.arch])
@@ -116,6 +123,8 @@ def main():
             with tarfile.open(archive, 'w:gz') as bundle:
                 bundle.add(binary, arcname='islander')
                 bundle.add(REPO / 'README.md', arcname='README.md')
+        if args.dmg:
+            build_dmg(archive, args.version, args.arch, work)
         if args.appimage:
             appdir = work / 'Islander.AppDir'
             (appdir / 'usr/bin').mkdir(parents=True)
