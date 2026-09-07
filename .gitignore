@@ -1,4 +1,5 @@
 /bin/
+/dist/
 /.local/
 /.cache/
 *.log

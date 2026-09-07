@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+APPDIR="${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
+if [ "$#" -eq 0 ]; then
+    set -- tui
+fi
+exec "$APPDIR/usr/bin/islander" "$@"

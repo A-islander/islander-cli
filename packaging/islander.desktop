@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Islander
+Name[zh_CN]=岛民岛
+Comment=Browse the Islander forum in your terminal
+Exec=islander tui
+Icon=islander
+Terminal=true
+Categories=Network;

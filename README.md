@@ -1,16 +1,73 @@
 # 岛民岛终端客户端
 
-给岛民的 **Bubble Tea TUI**，给岛民娘 AI 的 **Cobra CLI**。共用论坛 API、饼干和草稿逻辑。TUI 延续原型的深海色分栏界面，窄窗口自动切为单栏。
+用于交互浏览的 **Bubble Tea TUI**，用于命令行与自动化的 **Cobra CLI**。共用论坛 API、饼干和草稿逻辑。TUI 延续原型的深海色分栏界面，窄窗口自动切为单栏。
 
-当前为试用版本，源码仓库：[A-islander/islander-cli](https://github.com/A-islander/islander-cli)。岛民娘的跨岛提示词、接口说明与启动入口见 [islander-poster-girl](islander-poster-girl/README.md)。
+当前为试用版本，源码仓库：[A-islander/islander-cli](https://github.com/A-islander/islander-cli)。
 
-## 先试用
+## 安装
 
-当前工作区已编译好 Linux 可执行文件：
+首版为 **v0.0.1**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+
+### 使用 Go 安装
+
+需要 Go 1.26.5 或更新的工具链：
 
 ```sh
-cd /home/hedykan/Develope/islander/islander-cli
-./bin/islander
+go install github.com/A-islander/islander-cli/cmd/islander@latest
+islander --version
+islander tui
+```
+
+安装指定版本：
+
+```sh
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.1
+```
+
+可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
+
+```sh
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+旧的仓库根目录安装入口仍兼容，但生成的文件名是 `islander-cli`；推荐使用上面的 `cmd/islander` 入口。
+
+### 下载发布包
+
+[GitHub Releases](https://github.com/A-islander/islander-cli/releases) 提供 Linux x86_64 与 aarch64 的两种包，无需安装 Go：
+
+| 格式 | x86_64 文件名 |
+|---|---|
+| 二进制压缩包 | `islander-v0.0.1-linux-x86_64.tar.gz` |
+| AppImage | `islander-v0.0.1-linux-x86_64.AppImage` |
+
+ARM64 对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
+
+压缩包解压后即可运行：
+
+```sh
+tar -xzf islander-v0.0.1-linux-x86_64.tar.gz
+./islander --version
+./islander tui
+```
+
+AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
+
+```sh
+chmod +x islander-v0.0.1-linux-x86_64.AppImage
+./islander-v0.0.1-linux-x86_64.AppImage
+./islander-v0.0.1-linux-x86_64.AppImage --version
+./islander-v0.0.1-linux-x86_64.AppImage board list
+```
+
+没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
+
+### 从源码构建
+
+```sh
+git clone https://github.com/A-islander/islander-cli.git
+cd islander-cli
+make build
 ./bin/islander tui
 ```
 
@@ -105,9 +162,7 @@ python3 scripts/demo.py
 
 默认数据位于系统用户配置目录的 `islander/<服务地址摘要>/`，可用 `--data-dir` 更改。正式／测试端点的饼干与草稿相互隔离。CLI 读取默认匿名，需要身份的操作必须显式带 `--cookie daily`；TUI 使用你当前选择的饼干。
 
-## 给岛民娘的 CLI
-
-岛民娘的人设和只读试用提示词见 [岛民娘 CLI 试读](docs/islander-poster-girl-cli.md)。本机 Codex CLI 登录后可运行 `python3 scripts/ai-read-trial.py`：让她自行浏览正式论坛、读取上下文并输出三份未发布的回复草稿。测试使用独立的岛民岛数据目录，不使用 TUI 中的饼干；草稿与实际命令日志位于 Git 忽略的 `.local/ai-cli-trial/`。这轮只验证匿名阅读与生成文本，不调用发帖／回复接口。
+## CLI 用法
 
 默认 stdout 是 JSON，结构含 `schemaVersion: 1`；错误写 stderr，不混入正文。`--output text` 可查看缩进后的结果。退出码：0 成功、2 参数／本地错误、3 鉴权、4 网络／响应错误、5 业务拒绝。
 
@@ -140,10 +195,10 @@ python3 scripts/demo.py
 
 ## 构建与检查
 
-Go 版本见 `go.mod`，当前使用 Go 1.26.5。已在 Linux 上编译和验证，其他系统尚未验证。
+Go 版本见 `go.mod`，当前使用 Go 1.26.5。发布构建面向 Linux x86_64 与 aarch64，其他系统尚未验证。
 
 ```sh
-go build -o bin/islander .
+go build -o bin/islander ./cmd/islander
 go test -race ./...
 go vet ./...
 ```
@@ -162,3 +217,19 @@ go vet ./...
 | 海浪之家与岛屿场景 | 本项目当前范围是论坛，不包含图形场景 |
 
 `internal/forum` 是公共 API 层，`internal/local` 管理身份和草稿，`internal/cli` 与 `internal/tui` 提供两个入口，`internal/media` 管理附件预览／下载。
+
+## 发布构建
+
+本机构建当前架构的压缩包与 AppImage：
+
+```sh
+make release VERSION=v0.0.1
+```
+
+需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
+
+```sh
+python3 scripts/package.py --version v0.0.1 --arch aarch64
+```
+
+推送 `v*` 标签会触发 GitHub Actions：测试、分别构建两个架构、验证版本及启动入口，全部成功后发布两个压缩包、两个 AppImage 和校验文件。发布包只包含可执行文件、说明及必要的桌面资源。

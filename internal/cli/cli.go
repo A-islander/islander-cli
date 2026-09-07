@@ -84,7 +84,7 @@ func Execute() int {
 	return 0
 }
 func (a *app) root() *cobra.Command {
-	root := &cobra.Command{Use: "islander", Short: "岛民岛命令行客户端；islander tui 打开交互界面", SilenceUsage: true, SilenceErrors: true, Version: "0.1.0-local", Args: cobra.NoArgs,
+	root := &cobra.Command{Use: "islander", Short: "岛民岛命令行客户端；islander tui 打开交互界面", SilenceUsage: true, SilenceErrors: true, Version: commandVersion(), Args: cobra.NoArgs,
 		Example: "  islander board list\n  islander thread list --board 1 --page 1\n  islander thread get 20459\n  islander cookie import daily\n  islander mine list --cookie daily\n  islander tui"}
 	pf := root.PersistentFlags()
 	pf.StringVar(&a.f, "forum-url", forum.ForumURL, "论坛 API")
