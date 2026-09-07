@@ -6,7 +6,7 @@
 
 ## 安装
 
-首版为 **v0.0.1**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.2**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.1
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.2
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -34,19 +34,22 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 ### 下载发布包
 
-[GitHub Releases](https://github.com/A-islander/islander-cli/releases) 提供 Linux x86_64 与 aarch64 的两种包，无需安装 Go：
+[GitHub Releases](https://github.com/A-islander/islander-cli/releases) 提供 Linux、macOS 和 Windows 的 x86_64 / aarch64 发布包，无需安装 Go：
 
-| 格式 | x86_64 文件名 |
+| 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| 二进制压缩包 | `islander-v0.0.1-linux-x86_64.tar.gz` |
-| AppImage | `islander-v0.0.1-linux-x86_64.AppImage` |
+| Linux 压缩包 | `islander-v0.0.2-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.2-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.2-macos-x86_64.tar.gz` |
+| Windows 压缩包 | `islander-v0.0.2-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.2-windows-x86_64.exe` |
 
-ARM64 对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
+ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
-压缩包解压后即可运行：
+Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.1-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.2-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -54,13 +57,24 @@ tar -xzf islander-v0.0.1-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.1-linux-x86_64.AppImage
-./islander-v0.0.1-linux-x86_64.AppImage
-./islander-v0.0.1-linux-x86_64.AppImage --version
-./islander-v0.0.1-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.2-linux-x86_64.AppImage
+./islander-v0.0.2-linux-x86_64.AppImage
+./islander-v0.0.2-linux-x86_64.AppImage --version
+./islander-v0.0.2-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
+
+macOS 下载对应架构的 `macos` 压缩包，解压后在 Ghostty 或 Terminal 中运行 `./islander tui`。AppImage 仅适用于 Linux。macOS 包未做 Apple Developer ID 签名或公证。
+
+Windows 推荐下载 ZIP，解压后在 Windows Terminal / PowerShell 中运行：
+
+```powershell
+.\islander.exe --version
+.\islander.exe tui
+```
+
+也可下载独立 `.exe`，使用下载文件的完整名称运行并附加 `tui` 参数。
 
 ### 从源码构建
 
@@ -83,6 +97,46 @@ python3 scripts/demo.py
 
 `./bin/islander tui --demo` 则保留最初的八条虚构串，仅供离线浏览原型。
 
+## 多站点浏览
+
+**v0.0.2** 接入岛民岛、X 岛和 BOG。设计、接口依据和后续范围见 [多论坛 spec](docs/specs/multi-forum.md)。安装后直接运行：
+
+```sh
+islander --site x tui
+islander --site bog tui
+```
+
+宽屏列表右侧自动显示主楼及第一页最多五条回复摘要；选串停留片刻后加载，快速移动时取消旧请求。长内容和更多回复按 `Enter` 阅读完整串，预览不改变已保存的阅读位置。
+
+TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`v` 原位展开引用，`a` 查看附件。每次切站从时间线第一页加载，各站点的饼干、草稿和阅读缓存分开。默认仍为岛民岛。
+
+CLI 使用同一个 `--site` 参数，输出保留原有 `schemaVersion` / `data`，另附 `site` 来源字段：
+
+```sh
+islander site list
+islander --site x site info
+islander --site x board list
+islander --site x thread list --board 30
+islander --site x thread get 50000002
+islander --site bog thread list --board 综合版
+islander --site bog thread get 1423209 --page 2
+islander --site bog post get 1526630
+```
+
+外站目前支持浏览，发帖、我的内容、SAGE、删除恢复和领取饼干尚未接入。`site info` 返回已实现的能力；不支持的 CLI 操作返回 `unsupported`，TUI 隐藏相应菜单。下文发串与管理说明适用于岛民岛。
+
+X 岛使用 JSON API；BOG 的板块和串分页解析公开网页，引用读取 JSON。总数未知时 `count=-1`，楼层偏移未知时 `offset=-1`；按 `hasMore` 判断能否继续。BOG 板块 `key` 为原始名称，`id` 是稳定的本地导航编号，不能用于 BOG 的发帖 API。`--board` 可直接使用名称。X 岛的 `post get` 返回 `parentUnknown=true` 表示引用接口没有父串信息；`thread get` 和 TUI 的编号跳转应提供主串编号。
+
+导入外站饼干同样使用隐藏输入，不把凭证放进参数：
+
+```sh
+islander --site x cookie import daily
+islander --site x --cookie daily thread list --board 27
+islander --site bog cookie import daily
+```
+
+X 输入 `userhash` 的值，保留百分号编码；导入时只读检查受限板块访问权限。BOG 输入 `bog_master=值; bog_sel=值`（可选追加 `bog_list=值`），目前仅检查格式并保存，明确显示「未验证」，不代表账户或权限已通过验证。CLI 默认匿名；TUI 自动使用当前站点的活动饼干。自定义外站用 `--forum-url` 覆盖 endpoint，`--user-url` 仅适用于岛民岛。
+
 ## 发串、回复与引用
 
 1. 按 `i` 打开饼干管理，选择「导入饼干」，依次输入英文别名和饼干内容。饼干输入会隐藏；也可以选择「领取新饼干」并确认。
@@ -104,6 +158,7 @@ python3 scripts/demo.py
 
 | 按键 | 操作 |
 |---|---|
+| `g` | 切换岛民岛、X 岛、BOG；当前功能以站点能力为准 |
 | `↑↓` / `j k` | 列表选串；阅读区选择帖子及展开的引用 |
 | `Enter` | 进入串详情；阅读时打开选中帖子的操作菜单 |
 | `PgUp/PgDn` / 空格 | 滚动正文和原位引用；发布预览仍可用 `↑↓` 滚动 |
@@ -134,13 +189,15 @@ python3 scripts/demo.py
 
 ## 附件
 
-按 `a` 选附件，再选择：
+按 `a` 打开当前帖子或引用的附件列表，选中附件后按 `Enter`，直接在 TUI 内显示图片。窗口内可用：
 
-- `Enter`：独立终端预览。默认检测 Kitty 图形协议；未确认支持时显示彩色字符缩略图。
+- `←` / `→`（或 `h` / `l`）：前后切换附件。
+- `Esc`：返回附件列表，再按一次返回原帖，保留阅读位置。
+- `r` / `Enter`：重新加载；`b`：切换为字符预览。
 - `o`：通过系统默认应用打开，适合视频或其他文件。
 - `s`：下载到 `~/Downloads/islander/`，使用新文件名，不覆盖已有文件。
 
-可用 `--images auto|kitty|blocks|off` 手动控制。原图预览支持 Go 解码的 PNG、JPEG 和 GIF 首帧，限制 20 MB／3200 万像素；其他格式可以外部打开。视频、音频不在终端中播放。图片预览运行于独立子进程，返回时恢复 TUI。
+可用 `--images auto|kitty|blocks|off` 手动控制。原图预览支持 Go 解码的 PNG、JPEG 和 GIF 首帧，限制 20 MB／3200 万像素；其他格式可以外部打开。视频、音频不在终端中播放。图片预览在当前 TUI 内异步加载。默认查询终端能力，确认支持后使用 Kitty 图形协议的 Unicode 占位方式显示；未确认支持时自动显示彩色字符预览。切换或关闭图片会取消旧请求并清理对应图片，窗口缩放自动适配。
 
 ## 饼干和本地数据
 
@@ -150,7 +207,7 @@ python3 scripts/demo.py
 ./bin/islander tui --credential-store file
 ```
 
-文件方案的目录权限为 `0700`、文件为 `0600`，不做静默降级。普通元数据和 JSON 输出不包含饼干。可通过 CLI 隐藏输入导入：
+文件方案在 Linux/macOS 的目录权限为 `0700`、文件为 `0600`；Windows 使用所在用户目录继承的 ACL。凭证库失败不会静默降级。普通元数据和 JSON 输出不包含饼干。可通过 CLI 隐藏输入导入：
 
 ```sh
 ./bin/islander cookie import daily
@@ -195,7 +252,7 @@ python3 scripts/demo.py
 
 ## 构建与检查
 
-Go 版本见 `go.mod`，当前使用 Go 1.26.5。发布构建面向 Linux x86_64 与 aarch64，其他系统尚未验证。
+Go 版本见 `go.mod`，当前使用 Go 1.26.5。发布构建面向 Linux、macOS 和 Windows 的 x86_64 与 aarch64；CI 在对应系统运行测试并验证发布程序的版本和帮助入口。
 
 ```sh
 go build -o bin/islander ./cmd/islander
@@ -203,7 +260,7 @@ go test -race ./...
 go vet ./...
 ```
 
-测试覆盖 API 分页／引用／鉴权／上传契约、凭证隔离与权限、失败草稿恢复、确认前不发布、身份绑定、旧请求丢弃、终端布局及背景。正式服务验证限于匿名读取；写入通过本地模拟服务验证。
+测试覆盖 API 分页／引用／鉴权／上传契约、凭证隔离与权限、失败草稿恢复、确认前不发布、身份绑定、旧请求丢弃、终端布局及背景。正式服务验证限于只读请求（含 X 岛饼干访问）；写入通过本地模拟服务验证。
 
 | 与 Flutter／Web 对照 | 状态 |
 |---|---|
@@ -216,20 +273,27 @@ go vet ./...
 | 服务端全文搜索 | 现有客户端接口未提供，当前仅页内筛选 |
 | 海浪之家与岛屿场景 | 本项目当前范围是论坛，不包含图形场景 |
 
-`internal/forum` 是公共 API 层，`internal/local` 管理身份和草稿，`internal/cli` 与 `internal/tui` 提供两个入口，`internal/media` 管理附件预览／下载。
+`internal/forum` 定义共享操作接口与数据模型，并分别适配岛民岛 JSON、X 岛 JSON 和 BOG 网页／JSON；`internal/local` 管理身份和草稿，`internal/cli` 与 `internal/tui` 提供两个入口，`internal/media` 管理附件预览／下载。
 
 ## 发布构建
 
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.1
+make release VERSION=v0.0.2
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.1 --arch aarch64
+python3 scripts/package.py --version v0.0.2 --arch aarch64
 ```
 
-推送 `v*` 标签会触发 GitHub Actions：测试、分别构建两个架构、验证版本及启动入口，全部成功后发布两个压缩包、两个 AppImage 和校验文件。发布包只包含可执行文件、说明及必要的桌面资源。
+macOS / Windows 也可交叉编译：
+
+```sh
+python3 scripts/package.py --version v0.0.2 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.2 --os windows --arch x86_64
+```
+
+推送 `v*` 标签会触发 GitHub Actions：在三个系统的两个架构上测试、构建并验证版本及启动入口，全部成功后发布四个 tar.gz、两个 AppImage、两个 ZIP、两个 EXE 和校验文件。发布说明取自 `docs/releases/<版本>.md`。发布包只包含可执行文件、说明及必要的桌面资源。

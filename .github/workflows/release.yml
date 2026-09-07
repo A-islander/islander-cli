@@ -4,9 +4,18 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Build version (manual runs only validate packages; they do not publish)'
+        required: true
+        default: v0.0.2
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -14,10 +23,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
+          - os: linux
+            arch: x86_64
             runner: ubuntu-24.04
-          - arch: aarch64
+          - os: linux
+            arch: aarch64
             runner: ubuntu-24.04-arm
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+          - os: macos
+            arch: aarch64
+            runner: macos-15
+          - os: windows
+            arch: x86_64
+            runner: windows-2025
+          - os: windows
+            arch: aarch64
+            runner: windows-11-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -26,39 +49,54 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Check release tag
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Check release version
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
         run: |
-          [[ "$GITHUB_REF_TYPE" == tag ]]
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch || "$GITHUB_REF_TYPE" == tag ]]
           [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
       - name: Test
         run: |
-          go test -race ./...
+          go test ./...
           go vet ./...
+      - name: Race tests
+        if: matrix.os == 'linux'
+        run: go test -race ./...
       - name: Install desktop validator
+        if: matrix.os == 'linux'
         run: sudo apt-get update && sudo apt-get install -y desktop-file-utils
       - name: Build packages and check startup
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
           RELEASE_ARCH: ${{ matrix.arch }}
-        run: python3 scripts/package.py --version "$RELEASE_VERSION" --arch "$RELEASE_ARCH" --appimage
+          RELEASE_OS: ${{ matrix.os }}
+        run: |
+          extra=()
+          if [[ "$RELEASE_OS" == linux ]]; then extra+=(--appimage); fi
+          python scripts/package.py --version "$RELEASE_VERSION" --os "$RELEASE_OS" --arch "$RELEASE_ARCH" "${extra[@]}"
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.arch }}
+          name: packages-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
           retention-days: 7
 
   publish:
     needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          pattern: linux-*
+          pattern: packages-*
           path: dist
           merge-multiple: true
       - name: Publish release
@@ -69,14 +107,8 @@ jobs:
         run: |
           cd dist
           test "$(find . -maxdepth 1 -name '*.AppImage' | wc -l)" -eq 2
-          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 2
-          sha256sum -- *.tar.gz *.AppImage > SHA256SUMS
-          cat > release-notes.md <<'NOTES'
-          Islander 终端客户端，包含交互式 TUI 和 JSON CLI。
-
-          Go 安装：`go install github.com/A-islander/islander-cli/cmd/islander@latest`
-
-          压缩包解压后运行 `./islander tui`；AppImage 不带参数直接打开 TUI。
-          `--version` 查看版本。Linux x86_64、aarch64 分别提供压缩包和 AppImage；下载后可用 SHA256SUMS 校验。
-          NOTES
-          gh release create "$RELEASE_VERSION" --verify-tag --title "Islander $RELEASE_VERSION" --notes-file release-notes.md *.tar.gz *.AppImage SHA256SUMS
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 4
+          test "$(find . -maxdepth 1 -name '*.zip' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -name '*.exe' | wc -l)" -eq 2
+          sha256sum -- *.tar.gz *.AppImage *.zip *.exe > SHA256SUMS
+          gh release create "$RELEASE_VERSION" --verify-tag --title "Islander $RELEASE_VERSION" --notes-file "../docs/releases/$RELEASE_VERSION.md" *.tar.gz *.AppImage *.zip *.exe SHA256SUMS

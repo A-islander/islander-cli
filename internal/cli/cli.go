@@ -21,9 +21,10 @@ import (
 
 type app struct {
 	f, u, dir, backend, cookie, output, images string
+	site, token                                string
 	demo                                       bool
 	store                                      *local.Store
-	client                                     *forum.Client
+	client                                     forum.Backend
 }
 
 func (a *app) emit(v any) error {
@@ -32,19 +33,19 @@ func (a *app) emit(v any) error {
 		fmt.Println(forum.Clean(string(b)))
 		return nil
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"schemaVersion": 1, "data": v})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"schemaVersion": 1, "site": a.site, "data": v})
 }
 func (a *app) auth() error {
-	if a.cookie == "" || a.client.Token == "" {
+	if a.cookie == "" || a.token == "" {
 		return errors.New("此命令需要 --cookie 明确指定饼干别名")
 	}
 	return nil
 }
 func (a *app) confirm(v any, provided string, dry bool) (bool, error) {
 	b, e := json.Marshal(struct {
-		Forum, User, Cookie string
-		Payload             any
-	}{a.f, a.u, a.cookie, v})
+		Site, Forum, User, Cookie string
+		Payload                   any
+	}{a.site, a.f, a.u, a.cookie, v})
 	if e != nil {
 		return false, e
 	}
@@ -75,20 +76,21 @@ func Execute() int {
 			}
 		}
 		msg := forum.Clean(e.Error())
-		if a.client != nil && a.client.Token != "" {
-			msg = strings.ReplaceAll(msg, a.client.Token, "[已隐藏]")
+		if a.client != nil && a.token != "" {
+			msg = strings.ReplaceAll(msg, a.token, "[已隐藏]")
 		}
-		_ = json.NewEncoder(os.Stderr).Encode(map[string]any{"schemaVersion": 1, "error": map[string]string{"code": code, "message": msg}})
+		_ = json.NewEncoder(os.Stderr).Encode(map[string]any{"schemaVersion": 1, "site": a.site, "error": map[string]string{"code": code, "message": msg}})
 		return exit
 	}
 	return 0
 }
 func (a *app) root() *cobra.Command {
-	root := &cobra.Command{Use: "islander", Short: "岛民岛命令行客户端；islander tui 打开交互界面", SilenceUsage: true, SilenceErrors: true, Version: commandVersion(), Args: cobra.NoArgs,
+	root := &cobra.Command{Use: "islander", Short: "岛民岛终端客户端；--site 选择论坛，tui 打开交互界面", SilenceUsage: true, SilenceErrors: true, Version: commandVersion(), Args: cobra.NoArgs,
 		Example: "  islander board list\n  islander thread list --board 1 --page 1\n  islander thread get 20459\n  islander cookie import daily\n  islander mine list --cookie daily\n  islander tui"}
 	pf := root.PersistentFlags()
-	pf.StringVar(&a.f, "forum-url", forum.ForumURL, "论坛 API")
-	pf.StringVar(&a.u, "user-url", forum.UserURL, "用户 API")
+	pf.StringVar(&a.site, "site", "islander", "islander、x 或 bog")
+	pf.StringVar(&a.f, "forum-url", "", "覆盖当前站点的论坛 endpoint")
+	pf.StringVar(&a.u, "user-url", "", "覆盖岛民岛用户 API")
 	pf.StringVar(&a.dir, "data-dir", "", "本地数据目录")
 	pf.StringVar(&a.backend, "credential-store", "keyring", "keyring 或 file（显式选择 0600 明文文件）")
 	pf.StringVar(&a.cookie, "cookie", "", "操作绑定的饼干别名；CLI 默认匿名")
@@ -105,12 +107,12 @@ func (a *app) root() *cobra.Command {
 			return errors.New("images 只能是 auto、kitty、blocks 或 off")
 		}
 		var e error
-		a.client, e = forum.New(a.f, a.u, "")
+		site, e := forum.Resolve(a.site, a.f, a.u)
 		if e != nil {
 			return e
 		}
-		a.f, a.u = a.client.Forum, a.client.User
-		a.store, e = local.New(a.dir, a.f, a.u, a.backend)
+		a.f, a.u, a.site = site.ForumURL, site.UserURL, site.ID
+		a.store, e = local.NewSite(a.dir, a.site, a.f, a.u, a.backend)
 		if e != nil {
 			return e
 		}
@@ -119,12 +121,13 @@ func (a *app) root() *cobra.Command {
 			if e != nil {
 				return e
 			}
-			a.client.Token = token
+			a.token = token
 		}
-		return nil
+		a.client, e = forum.NewBackend(a.site, a.f, a.u, a.token)
+		return e
 	}
 	run := func(*cobra.Command, []string) error {
-		return tui.Run(tui.Options{ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo})
+		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo})
 	}
 	root.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 	tc := &cobra.Command{Use: "tui", Short: "交互浏览论坛", Args: cobra.NoArgs, RunE: run}
@@ -141,12 +144,19 @@ func (a *app) root() *cobra.Command {
 		return a.emit(v)
 	}})
 	root.AddCommand(board)
+	root.AddCommand(a.siteCommands())
 	for _, kind := range []string{"thread", "reply", "mine", "sage"} {
 		group := &cobra.Command{Use: kind, Short: map[string]string{"thread": "列串、读串、发新串", "reply": "读取回复、回复或引用回复", "mine": "查看指定饼干的内容", "sage": "查看 SAGE 内容"}[kind]}
 		var page, id int
+		var boardKey string
 		list := &cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 			k := kind
 			if k == "thread" {
+				var e error
+				id, e = a.resolveBoard(c, boardKey)
+				if e != nil {
+					return e
+				}
 				k = "timeline"
 				if id > 0 {
 					k = "board"
@@ -159,6 +169,9 @@ func (a *app) root() *cobra.Command {
 				}
 			}
 			if k == "mine" {
+				if !a.client.Capabilities().Mine {
+					return forum.Unsupported("我的内容")
+				}
 				if e := a.auth(); e != nil {
 					return e
 				}
@@ -171,7 +184,7 @@ func (a *app) root() *cobra.Command {
 		}}
 		list.Flags().IntVar(&page, "page", 1, "从 1 开始的页码")
 		if kind == "thread" {
-			list.Flags().IntVar(&id, "board", 0, "板块编号；默认时间线")
+			list.Flags().StringVar(&boardKey, "board", "", "板块编号或名称；默认时间线")
 		}
 		if kind == "reply" {
 			list.Short = "读取主串的一页内容（服务端列表可能包含主楼）"
@@ -193,6 +206,9 @@ func (a *app) root() *cobra.Command {
 				page, e := a.client.List(c.Context(), "thread", p.ThreadID(), detailPage)
 				if e != nil {
 					return e
+				}
+				if page.Root != nil && p.ID == page.Root.ID {
+					p = *page.Root
 				}
 				return a.emit(map[string]any{"post": p, "replies": page})
 			}}
@@ -223,6 +239,9 @@ func (a *app) root() *cobra.Command {
 		var confirm string
 		var dry bool
 		cmd := &cobra.Command{Use: action + " ID", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
+			if e := a.requireAction(action); e != nil {
+				return e
+			}
 			if e := a.auth(); e != nil {
 				return e
 			}
@@ -278,6 +297,9 @@ func (a *app) composeCommand(use string, reply bool) *cobra.Command {
 	var dry bool
 	var quote int
 	cmd := &cobra.Command{Use: use, Short: "预览后使用 --confirm 发布", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+		if !a.client.Capabilities().Publish {
+			return forum.Unsupported("发帖")
+		}
 		if e := a.auth(); e != nil {
 			return e
 		}
@@ -291,7 +313,7 @@ func (a *app) composeCommand(use string, reply bool) *cobra.Command {
 		d.Body = body
 		d.Cookie = a.cookie
 		if quote > 0 {
-			d.Body = fmt.Sprintf("No.%d\n%s", quote, d.Body)
+			d.Body = forum.Quote(a.site, quote) + "\n" + d.Body
 		}
 		if e = d.Validate(); e != nil {
 			return e
@@ -376,7 +398,7 @@ func (a *app) cookieCommands() *cobra.Command {
 		if e != nil {
 			return e
 		}
-		client, e := forum.New(a.f, a.u, strings.TrimSpace(string(token)))
+		client, e := forum.NewBackend(a.site, a.f, a.u, strings.TrimSpace(string(token)))
 		if e != nil {
 			return e
 		}
@@ -384,7 +406,7 @@ func (a *app) cookieCommands() *cobra.Command {
 		if e != nil {
 			return e
 		}
-		if e = a.store.Import(args[0], client.Token, user); e != nil {
+		if e = a.store.Import(args[0], strings.TrimSpace(string(token)), user); e != nil {
 			return e
 		}
 		return a.emit(map[string]any{"alias": args[0], "user": user})
@@ -395,6 +417,9 @@ func (a *app) cookieCommands() *cobra.Command {
 		var confirm string
 		cmd := &cobra.Command{Use: action + " ALIAS", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
 			alias := args[0]
+			if action == "register" && !a.client.Capabilities().Register {
+				return forum.Unsupported("领取饼干")
+			}
 			ok, e := a.confirm(map[string]string{"action": "cookie-" + action, "alias": alias}, confirm, false)
 			if e != nil || !ok {
 				return e
@@ -408,7 +433,7 @@ func (a *app) cookieCommands() *cobra.Command {
 				if e != nil {
 					return e
 				}
-				client, e := forum.New(a.f, a.u, token)
+				client, e := forum.NewBackend(a.site, a.f, a.u, token)
 				if e != nil {
 					return e
 				}
@@ -479,6 +504,9 @@ func (a *app) draftCommands() *cobra.Command {
 					return a.emit(d)
 				}
 				if action == "publish" {
+					if !a.client.Capabilities().Publish {
+						return forum.Unsupported("发帖")
+					}
 					if e = d.Validate(); e != nil {
 						return e
 					}
@@ -502,5 +530,42 @@ func (a *app) draftCommands() *cobra.Command {
 		cmd.Flags().StringVar(&confirm, "confirm", "", "预览返回的确认码")
 		group.AddCommand(cmd)
 	}
+	return group
+}
+
+func (a *app) resolveBoard(c *cobra.Command, key string) (int, error) {
+	if key == "" {
+		return 0, nil
+	}
+	if id, e := strconv.Atoi(key); e == nil && id > 0 {
+		return id, nil
+	}
+	boards, e := a.client.Boards(c.Context())
+	if e != nil {
+		return 0, e
+	}
+	for _, b := range boards {
+		if b.Key == key || b.Name == key {
+			return b.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("板块不存在；请运行 board list")
+}
+func (a *app) requireAction(action string) error {
+	cap := a.client.Capabilities()
+	if (action == "sage" || action == "unsage") && cap.Sage {
+		return nil
+	}
+	if (action == "delete" || action == "restore") && cap.Manage {
+		return nil
+	}
+	return forum.Unsupported(action)
+}
+func (a *app) siteCommands() *cobra.Command {
+	group := &cobra.Command{Use: "site", Short: "查询站点与已实现的功能"}
+	group.AddCommand(&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error { return a.emit(forum.Sites()) }})
+	group.AddCommand(&cobra.Command{Use: "info", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
+		return a.emit(map[string]any{"site": a.site, "forumURL": a.f, "capabilities": a.client.Capabilities(), "credentialScope": a.store.Scope})
+	}})
 	return group
 }

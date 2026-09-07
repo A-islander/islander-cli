@@ -27,8 +27,11 @@ func (m *model) openPostActions() {
 		{"s · SAGE", "post-action", "s"},
 		{"S · 反对 SAGE", "post-action", "S"},
 	}
-	if m.identity.Alias != "" && p.UserID == m.identity.ID {
+	if m.capabilities().Manage && m.identity.Alias != "" && p.UserID == m.identity.ID {
 		m.menu = append(m.menu, menuItem{"x · 删除", "post-action", "x"}, menuItem{"X · 恢复", "post-action", "X"})
+	}
+	if !m.capabilities().Publish {
+		m.menu = []menuItem{{"a · 查看附件", "post-action", "a"}, {"v · 原位展开 / 收起引用", "post-action", "v"}}
 	}
 	m.returnModal = fmt.Sprintf("No.%d · 帖子操作", p.ID)
 	m.menuIndex = 0
@@ -36,6 +39,10 @@ func (m *model) openPostActions() {
 }
 
 func (m *model) beginCompose(reply, quote bool) tea.Cmd {
+	if !m.capabilities().Publish {
+		m.notice = "当前站点暂未接入发帖；请使用站点网页"
+		return nil
+	}
 	if m.identity.Alias == "" {
 		m.notice = "请先导入或领取饼干"
 		m.openCookies()
@@ -53,7 +60,7 @@ func (m *model) beginCompose(reply, quote bool) tea.Cmd {
 		}
 		if quote {
 			if p, ok := m.selectedPost(); ok {
-				d.Body = fmt.Sprintf("No.%d\n", p.id)
+				d.Body = forum.Quote(m.opts.Site, p.id) + "\n"
 			}
 		}
 	} else {
@@ -102,7 +109,11 @@ func (m *model) openCookies() {
 			m.menu = append(m.menu, menuItem{c.Alias + " / " + c.Name + mark, "cookie", c.Alias})
 		}
 	}
-	m.menu = append(m.menu, menuItem{"导入饼干（隐藏输入）", "import", ""}, menuItem{"领取新饼干", "register", ""}, menuItem{"使用访客身份", "anonymous", ""})
+	m.menu = append(m.menu, menuItem{"导入饼干（隐藏输入）", "import", ""})
+	if m.capabilities().Register {
+		m.menu = append(m.menu, menuItem{"领取新饼干", "register", ""})
+	}
+	m.menu = append(m.menu, menuItem{"使用访客身份", "anonymous", ""})
 	m.modal = "menu"
 	m.returnModal = "饼干 · x 移除选中的本机饼干"
 	m.menuIndex = 0
@@ -173,6 +184,8 @@ func (m *model) selectMenu() tea.Cmd {
 	item := m.menu[m.menuIndex]
 	m.modal = ""
 	switch item.Action {
+	case "site":
+		return m.switchSite(item.Value)
 	case "post-action":
 		next, cmd, _ := m.extendedUpdate(tea.KeyPressMsg{Code: []rune(item.Value)[0], Text: item.Value})
 		*m = next.(model)
@@ -204,6 +217,11 @@ func (m *model) selectMenu() tea.Cmd {
 		}
 		m.raw = map[int]forum.Post{}
 		m.pages = map[int]forum.Page{}
+		m.inlineQuotes = map[string][]inlineQuote{}
+		m.quoteOffsets = map[string]int{}
+		m.offsets = map[int]int{}
+		m.activeQuote = ""
+		m.jumpSource = nil
 		m.threads = nil
 		m.refilter()
 		m.kind = "timeline"
@@ -233,10 +251,9 @@ func (m *model) selectMenu() tea.Cmd {
 			}
 		}
 	case "attachment":
-		m.modal = "attachment"
-		return nil
+		return m.openAttachment()
 	case "link":
-		return m.launch("media", func(_ context.Context, _ *forum.Client) (any, error) {
+		return m.launch("media", func(_ context.Context, _ forum.Backend) (any, error) {
 			return "已打开链接", media.Open(item.Value)
 		})
 
@@ -253,7 +270,7 @@ func (m *model) confirm() tea.Cmd {
 	}
 	if action == "remove-cookie" {
 		alias := m.menu[m.menuIndex].Value
-		return m.launch("identity", func(_ context.Context, _ *forum.Client) (any, error) { return nil, s.Remove(alias) })
+		return m.launch("identity", func(_ context.Context, _ forum.Backend) (any, error) { return nil, s.Remove(alias) })
 	}
 	if action == "remove-draft" {
 		e := s.DeleteDraft(m.menu[m.menuIndex].Value)
@@ -269,11 +286,18 @@ func (m *model) confirm() tea.Cmd {
 			m.modal = ""
 			return nil
 		}
-		return m.launch("registered", func(ctx context.Context, c *forum.Client) (any, error) { token, e := c.Register(ctx); return token, e })
+		return m.launch("registered", func(ctx context.Context, c forum.Backend) (any, error) { token, e := c.Register(ctx); return token, e })
 	}
-	return m.launch("action", func(ctx context.Context, c *forum.Client) (any, error) { return nil, c.Action(ctx, action, id) })
+	return m.launch("action", func(ctx context.Context, c forum.Backend) (any, error) { return nil, c.Action(ctx, action, id) })
 }
 func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	if cmd, handled := m.attachmentUpdate(msg); handled {
+		return *m, cmd, true
+	}
+	if _, ok := msg.(startMsg); ok {
+		cmd := m.initialLoad()
+		return *m, cmd, true
+	}
 	if result, ok := msg.(directoryMsg); ok {
 		if m.modal == "filepicker" && result.request == m.filePicker.request {
 			m.filePicker.loading = false
@@ -287,6 +311,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	if click, ok := msg.(tea.MouseClickMsg); ok {
 		if click.Button == tea.MouseLeft && !m.busy && m.modal == "" && !m.opts.Demo && m.width >= 44 && m.height >= 16 &&
 			click.Y == 3 && click.X >= m.mineButtonX() && click.X < m.width-1 {
+			if !m.capabilities().Mine {
+				m.openSites()
+				return *m, nil, true
+			}
 			return *m, m.openMine(), true
 		}
 		return *m, nil, true
@@ -368,6 +396,11 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.aliasInput = ""
 			m.raw = map[int]forum.Post{}
 			m.pages = map[int]forum.Page{}
+			m.inlineQuotes = map[string][]inlineQuote{}
+			m.quoteOffsets = map[string]int{}
+			m.offsets = map[int]int{}
+			m.activeQuote = ""
+			m.jumpSource = nil
 			m.threads = nil
 			m.refilter()
 			m.kind = "timeline"
@@ -414,6 +447,15 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	}
 	k := keymsg.String()
 	if m.busy {
+		if k == "g" && m.modal == "" {
+			if m.cancel != nil {
+				m.cancel()
+			}
+			m.requestID++
+			m.busy = false
+			m.openSites()
+			return *m, nil, true
+		}
 		if (k == "esc" || k == "q" || k == "ctrl+c") && m.modal != "publish" && m.modal != "confirm" && m.modal != "token" && m.modal != "register-alias" {
 			if m.cancel != nil {
 				m.cancel()
@@ -499,7 +541,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			}
 			d := m.draft
 			s := m.store
-			return *m, m.launch("publish", func(ctx context.Context, c *forum.Client) (any, error) { return s.Publish(ctx, c, d) }), true
+			return *m, m.launch("publish", func(ctx context.Context, c forum.Backend) (any, error) { return s.Publish(ctx, c, d) }), true
 		}
 		m.popup, _ = m.popup.Update(msg)
 		return *m, nil, true
@@ -544,17 +586,13 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		if k == "o" || k == "enter" || k == "s" {
 			item := m.menu[m.menuIndex]
-			if k == "enter" {
-				return *m, media.PreviewCmd(item.Value, m.opts.Images, func(e error) tea.Msg {
-					return resultMsg{ID: m.requestID, Kind: "media", Value: "预览已关闭", Err: e}
-				}), true
-			}
+
 			if k == "o" {
-				return *m, m.launch("media", func(_ context.Context, _ *forum.Client) (any, error) {
+				return *m, m.launch("media", func(_ context.Context, _ forum.Backend) (any, error) {
 					return "已交给系统打开", media.Open(item.Value)
 				}), true
 			}
-			return *m, m.launch("media", func(ctx context.Context, _ *forum.Client) (any, error) { return media.Download(ctx, item.Value, "") }), true
+			return *m, m.launch("media", func(ctx context.Context, _ forum.Backend) (any, error) { return media.Download(ctx, item.Value, "") }), true
 		}
 		return *m, nil, true
 	}
@@ -582,10 +620,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 					alias, token = value, m.aliasInput
 				}
 				s := m.store
-				f, u := m.opts.ForumURL, m.opts.UserURL
+				f, u, site := m.opts.ForumURL, m.opts.UserURL, m.opts.Site
 				m.input.SetValue("")
-				return *m, m.launch("identity", func(ctx context.Context, _ *forum.Client) (any, error) {
-					c, e := forum.New(f, u, token)
+				return *m, m.launch("identity", func(ctx context.Context, _ forum.Backend) (any, error) {
+					c, e := forum.NewBackend(site, f, u, token)
 					if e != nil {
 						return nil, e
 					}
@@ -630,6 +668,9 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return *m, nil, false
 	}
 	switch k {
+	case "g":
+		m.openSites()
+		return *m, nil, true
 	case "m":
 		return *m, m.openMine(), true
 	case "L":
@@ -692,13 +733,13 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			t := m.current()
 			p := m.pages[t.id]
 			page := p.Page + delta
-			if page >= 1 && page <= max(1, (p.Count+19)/20) {
+			if page >= 1 && (delta < 0 || p.HasMore) {
 				m.offsets[t.id] = 0
 				return *m, m.loadThread(t.id, page, 0), true
 			}
 		} else {
 			page := m.page + delta
-			if page >= 1 && page <= max(1, (m.total+19)/20) {
+			if page >= 1 && (delta < 0 || m.listPage.HasMore) {
 				return *m, m.loadList(page), true
 			}
 		}
@@ -714,7 +755,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		p, ok := m.activeRaw()
 		if ok {
 			m.menu = nil
-			for _, a := range forum.MediaItems(p.MediaURL) {
+			for _, a := range p.Media() {
 				m.menu = append(m.menu, menuItem{a.Type + " · " + a.URL, "attachment", a.URL})
 			}
 			if len(m.menu) > 0 {
@@ -727,6 +768,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return *m, nil, true
 	case "s", "S", "x", "X":
+		if ((k == "s" || k == "S") && !m.capabilities().Sage) || ((k == "x" || k == "X") && !m.capabilities().Manage) {
+			m.notice = "当前站点不支持此操作"
+			return *m, nil, true
+		}
 		p, ok := m.activeRaw()
 		if !ok {
 			return *m, nil, true
@@ -806,7 +851,10 @@ func (m model) extendedDialog() (string, bool) {
 	case "attachment":
 		content = strong("附件", teal) + "\n\n" + bodyText(m.menu[m.menuIndex].Value, iw) + "\n\n" + ink("Enter 终端预览 · o 系统打开 · s 下载 · Esc 返回", sand)
 	case "live-help":
-		content = strong("上岛指南", teal) + "\n\n" + bodyText("↑↓ / jk 选串、帖子和引用 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：Tab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点\n↑↓ / jk 选串、帖子和引用 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：Tab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		if !m.capabilities().Publish {
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · i 饼干\n↑↓ / jk 选串、帖子和引用 · Enter 阅读/操作\nn/p 上下楼 · PgUp/PgDn 滚动\nv 原位展开 / 收起引用 · Esc 返回上层\na 附件 · [ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n发帖、我的内容及管理操作尚未接入。", iw)
+		}
 	default:
 		return "", false
 	}

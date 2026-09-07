@@ -25,12 +25,18 @@ const PageSize = 20
 const MaxFile = 20 << 20
 
 type Board struct {
+	Key    string `json:"key,omitempty"`
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	Status int    `json:"status"`
 	Value  string `json:"value"`
 }
 type Post struct {
+	Site          string  `json:"site,omitempty"`
+	AuthorID      string  `json:"authorId,omitempty"`
+	RawHTML       string  `json:"rawHtml,omitempty"`
+	ParentUnknown bool    `json:"parentUnknown,omitempty"`
+	BoardName     string  `json:"boardName,omitempty"`
 	Attachments   []Media `json:"attachments"`
 	SageAddIDs    []int   `json:"sageAddId"`
 	SageSubIDs    []int   `json:"sageSubId"`
@@ -60,6 +66,8 @@ func (p Post) ThreadID() int {
 }
 
 type Page struct {
+	Root    *Post  `json:"root,omitempty"`
+	Offset  int    `json:"offset"`
 	List    []Post `json:"list"`
 	Count   int    `json:"count"`
 	Page    int    `json:"page"`
@@ -67,8 +75,10 @@ type Page struct {
 	HasMore bool   `json:"hasMore"`
 }
 type User struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	Key          string `json:"key,omitempty"`
+	Verification string `json:"verification,omitempty"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
 }
 type Media struct {
 	ID        string `json:"id"`
@@ -123,7 +133,7 @@ func FileInfo(path string) (os.FileInfo, error) {
 	return f, nil
 }
 
-var quoteRE = regexp.MustCompile(`(?i)No\.(\d+)`)
+var quoteRE = regexp.MustCompile(`(?i)(?:No|Po)\.(\d+)`)
 
 func QuoteIDs(body string) []int {
 	ids := []int{}
@@ -300,6 +310,7 @@ func (c *Client) List(ctx context.Context, kind string, id, page int) (Page, err
 		q.Set("postId", strconv.Itoa(id))
 	}
 	e := c.request(ctx, c.Forum, "GET", path, q, nil, "", &p)
+	p.Page, p.Size, p.Offset = page, PageSize, (page-1)*PageSize
 	p.HasMore = page*PageSize < p.Count
 	if p.List == nil {
 		p.List = []Post{}

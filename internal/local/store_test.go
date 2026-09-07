@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,8 +25,12 @@ func TestIdentityScopeAndPermissions(t *testing.T) {
 	if e != nil || strings.Contains(string(b), "secret-value") {
 		t.Fatal("metadata contains credential")
 	}
-	st, _ := os.Stat(filepath.Join(s.Dir, "secret-daily.json"))
-	if st.Mode().Perm() != 0600 {
+	st, e := os.Stat(filepath.Join(s.Dir, "secret-daily.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Windows uses inherited ACLs rather than POSIX permission bits.
+	if runtime.GOOS != "windows" && st.Mode().Perm() != 0600 {
 		t.Fatal("credential permissions")
 	}
 	_, token, e := s.Identity("daily")

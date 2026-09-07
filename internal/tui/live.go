@@ -28,21 +28,19 @@ type threadResult struct {
 }
 type menuItem struct{ Label, Action, Value string }
 
-func (m model) initialLoad() tea.Cmd {
-	c := m.client
-	if c == nil {
-		c, _ = forum.New(m.opts.ForumURL, m.opts.UserURL, "")
-	}
-	return func() tea.Msg {
-		b, e := c.Boards(context.Background())
+type startMsg struct{}
+
+func (m *model) initialLoad() tea.Cmd {
+	return m.launch("initial", func(ctx context.Context, c forum.Backend) (any, error) {
+		b, e := c.Boards(ctx)
 		if e != nil {
-			return resultMsg{Kind: "initial", Err: e}
+			return nil, e
 		}
-		p, e := c.List(context.Background(), "timeline", 0, 1)
-		return resultMsg{Kind: "initial", Value: initialResult{b, p}, Err: e}
-	}
+		p, e := c.List(ctx, "timeline", 0, 1)
+		return initialResult{b, p}, e
+	})
 }
-func (m *model) launch(kind string, fn func(context.Context, *forum.Client) (any, error)) tea.Cmd {
+func (m *model) launch(kind string, fn func(context.Context, forum.Backend) (any, error)) tea.Cmd {
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -57,6 +55,11 @@ func (m *model) launch(kind string, fn func(context.Context, *forum.Client) (any
 func (m model) environmentLabel() string {
 	if m.opts.Demo {
 		return "离线体验"
+	}
+	for _, s := range forum.Sites() {
+		if m.opts.Site == s.ID && s.ID != "islander" {
+			return s.Name
+		}
 	}
 	if m.opts.ForumURL != forum.ForumURL {
 		return "自定义服务"
@@ -81,11 +84,17 @@ func (m model) boardLabel(id int) string {
 			return forum.Clean(b.Name)
 		}
 	}
+	if id <= 0 {
+		return "板块未知"
+	}
 	return "板块 " + strconv.Itoa(id)
 }
 func (m *model) displayPost(p forum.Post) post {
 	m.raw[p.ID] = p
 	t := time.Unix(p.Time, 0).Format("01-02 15:04")
+	if p.Time == 0 {
+		t = "时间未知"
+	}
 	if p.Time > 1e12 {
 		t = time.UnixMilli(p.Time).Format("01-02 15:04")
 	}
@@ -96,7 +105,7 @@ func (m *model) displayPost(p forum.Post) post {
 		quote = ids[0]
 	}
 	att := ""
-	if items := forum.MediaItems(p.MediaURL); len(items) > 0 {
+	if items := p.Media(); len(items) > 0 {
 		att = fmt.Sprintf("%d 个附件 · a 打开附件列表", len(items))
 	}
 	return post{p.ID, forum.Clean(p.Name), t, forum.Clean(p.Body), quote, att, p.Status == 2}
@@ -115,7 +124,11 @@ func (m *model) displayThread(p forum.Post) thread {
 	if p.Status == 1 {
 		title = "[SAGE] " + title
 	}
-	return thread{p.ID, m.boardLabel(p.BoardID), title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
+	board := p.BoardName
+	if board == "" {
+		board = m.boardLabel(p.BoardID)
+	}
+	return thread{p.ID, board, title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
 	m.inlineQuotes = map[string][]inlineQuote{}
@@ -125,17 +138,22 @@ func (m *model) applyPage(p forum.Page) {
 	m.threads = nil
 	m.page = p.Page
 	m.total = p.Count
+	m.listPage = p
 	for _, v := range p.List {
 		m.threads = append(m.threads, m.displayThread(v))
 	}
 	m.refilter()
-	m.notice = fmt.Sprintf("第 %d 页 · %d 条内容 · b 板块 / c 发串 / i 饼干", p.Page, p.Count)
+	m.notice = p.Label() + " · b 板块 / g 切站 / i 饼干"
 	if m.kind == "mine" {
 		m.notice = fmt.Sprintf("我的内容 · 饼干 %s · 发串与回复（含删除记录）· 第 %d 页 / %d 条", m.identity.Alias, p.Page, p.Count)
 	}
 }
 
 func (m *model) openMine() tea.Cmd {
+	if !m.capabilities().Mine {
+		m.notice = "当前站点不支持我的内容"
+		return nil
+	}
 	if m.opts.Demo {
 		m.notice = "离线原型没有个人内容；请连接论坛或运行本地试用岛"
 		return nil
@@ -175,13 +193,13 @@ func (m *model) loadList(page int) tea.Cmd {
 		id = m.apiBoards[m.board-1].ID
 	}
 	m.reading = false
-	return m.launch("list", func(ctx context.Context, c *forum.Client) (any, error) { return c.List(ctx, kind, id, page) })
+	return m.launch("list", func(ctx context.Context, c forum.Backend) (any, error) { return c.List(ctx, kind, id, page) })
 }
 func (m *model) loadThread(id, page, target int) tea.Cmd {
 	if t := m.current(); m.reading && t != nil && t.id == id && m.pages[t.id].Page == page {
 		m.savePosition()
 	}
-	return m.launch("thread", func(ctx context.Context, c *forum.Client) (any, error) {
+	return m.launch("thread", func(ctx context.Context, c forum.Backend) (any, error) {
 		p, e := c.Post(ctx, id)
 		if e != nil {
 			return nil, e
@@ -200,6 +218,9 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 			}
 		}
 		list, e := c.List(ctx, "thread", p.ID, page)
+		if list.Root != nil {
+			p = *list.Root
+		}
 		return threadResult{p, list, target}, e
 	})
 }
@@ -232,7 +253,7 @@ func (m *model) applyThread(r threadResult) {
 			}
 		}
 	}
-	m.notice = fmt.Sprintf("串 No.%d · 第 %d/%d 页 · [ ] 翻页 · r 回复 / R 引用回复", t.id, r.Page.Page, max(1, (r.Page.Count+19)/20))
+	m.notice = fmt.Sprintf("串 No.%d · %s · [ ] 翻页 · v 引用 / a 附件", t.id, r.Page.Label())
 }
 func (m *model) activeRaw() (forum.Post, bool) {
 	selected, ok := m.selectedPost()
@@ -247,7 +268,12 @@ func (m *model) openBoards() {
 	for i, b := range m.apiBoards {
 		m.menu = append(m.menu, menuItem{forum.Clean(b.Name), "board", strconv.Itoa(i + 1)})
 	}
-	m.menu = append(m.menu, menuItem{"SAGE 内容", "sage", ""}, menuItem{"我的内容 · 含删除记录", "mine", ""})
+	if m.capabilities().Sage {
+		m.menu = append(m.menu, menuItem{"SAGE 内容", "sage", ""})
+	}
+	if m.capabilities().Mine {
+		m.menu = append(m.menu, menuItem{"我的内容 · 含删除记录", "mine", ""})
+	}
 	m.menuIndex = 0
 	m.modal = "menu"
 	m.returnModal = "板块与时间线"

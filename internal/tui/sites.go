@@ -1,0 +1,90 @@
+package tui
+
+import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/A-islander/islander-cli/internal/forum"
+	"github.com/A-islander/islander-cli/internal/local"
+	"path/filepath"
+)
+
+func (m model) capabilities() forum.Capabilities {
+	if m.client != nil {
+		return m.client.Capabilities()
+	}
+	// The offline prototype and existing in-memory views use Islander behavior.
+	return (&forum.Client{}).Capabilities()
+}
+func (m *model) openSites() {
+	m.menu = nil
+	for _, s := range forum.Sites() {
+		label := s.Name
+		if s.ID == m.opts.Site || (s.ID == "islander" && m.opts.Site == "") {
+			label += " · 当前"
+		}
+		m.menu = append(m.menu, menuItem{label, "site", s.ID})
+	}
+	m.menuIndex = 0
+	m.modal = "menu"
+	m.returnModal = "切换站点"
+}
+func (m *model) switchSite(id string) tea.Cmd {
+	if m.siteConfigs == nil {
+		m.siteConfigs = map[string]forum.Site{}
+	}
+	current, err := forum.Resolve(m.opts.Site, m.opts.ForumURL, m.opts.UserURL)
+	if err != nil {
+		m.notice = err.Error()
+		return nil
+	}
+	m.siteConfigs[current.ID] = current
+	s, ok := m.siteConfigs[id]
+	if !ok {
+		s, err = forum.Resolve(id, "", "")
+		if err != nil {
+			m.notice = err.Error()
+			return nil
+		}
+	}
+	o := m.opts
+	o.Site, o.ForumURL, o.UserURL, o.Cookie = id, s.ForumURL, s.UserURL, ""
+	if o.DataDir == "" && m.store != nil {
+		o.DataDir = filepath.Dir(m.store.Dir)
+	}
+	if o.Backend == "" {
+		if m.store != nil {
+			o.Backend = m.store.Backend
+		} else {
+			o.Backend = "keyring"
+		}
+	}
+	store, err := local.NewSite(o.DataDir, id, s.ForumURL, s.UserURL, o.Backend)
+	if err != nil {
+		m.notice = err.Error()
+		return nil
+	}
+	// A fresh model owns every post ID, inline quote and scroll position. Never
+	// carry old numeric caches into a new site or allow old async results in.
+	next := newModel()
+	o.Store = store
+	next.opts, next.store, next.siteConfigs = o, store, m.siteConfigs
+	next.opts.Demo = false
+	next.boardNames = []string{"全部"}
+	next.threads = nil
+	next.refilter()
+	next.requestID = m.requestID + 1
+	next.fullscreen = m.fullscreen
+	next.resize(m.width, m.height)
+	if err = next.setIdentity(""); err != nil {
+		m.notice = err.Error()
+		return nil
+	}
+	if m.previewCancel != nil {
+		m.previewCancel()
+	}
+	if m.cancel != nil {
+		m.cancel()
+	}
+	*m = next
+	m.refilter()
+	return m.initialLoad()
+}

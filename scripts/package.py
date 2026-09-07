@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build versioned Linux archives and AppImages from an explicit file list."""
+"""Build versioned Linux/macOS archives, Windows executables and Linux AppImages."""
 import argparse
 import hashlib
 import os
@@ -11,9 +11,22 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
 ARCHES = {'x86_64': 'amd64', 'aarch64': 'arm64'}
+SYSTEMS = {'linux': 'linux', 'macos': 'darwin', 'windows': 'windows'}
+
+
+def host_arch():
+    return {'amd64': 'x86_64', 'arm64': 'aarch64'}.get(
+        platform.machine().lower(), platform.machine().lower())
+
+
+def host_os():
+    return {'darwin': 'macos'}.get(platform.system().lower(), platform.system().lower())
+
+
 TOOL_VERSION = '1.9.1'
 TOOL_HASHES = {
     'x86_64': 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0',
@@ -55,14 +68,17 @@ def download(url, expected, target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True, help='例如 v0.0.1')
-    parser.add_argument('--arch', choices=ARCHES, default=platform.machine())
+    parser.add_argument('--os', choices=SYSTEMS, default=host_os())
+    parser.add_argument('--arch', choices=ARCHES, default=host_arch())
     parser.add_argument('--appimage', action='store_true', help='同时构建 AppImage，需要本机架构 Linux')
     args = parser.parse_args()
     if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', args.version):
         parser.error('发布版本必须形如 v0.0.1 或 v0.0.1-rc.1')
     if args.arch not in ARCHES:
         parser.error('请指定 --arch x86_64 或 aarch64')
-    if args.appimage and (platform.system() != 'Linux' or platform.machine() != args.arch):
+    if args.os not in SYSTEMS:
+        parser.error('请指定 --os linux、macos 或 windows')
+    if args.appimage and (args.os != 'linux' or host_os() != 'linux' or host_arch() != args.arch):
         parser.error('AppImage 必须在对应架构的 Linux 上构建')
     if args.appimage and not shutil.which('desktop-file-validate'):
         parser.error('AppImage 构建需要 desktop-file-validate（Debian/Ubuntu: desktop-file-utils）')
@@ -70,28 +86,36 @@ def main():
     output.mkdir(exist_ok=True)
     build_root = REPO / '.local/release-build'
     build_root.mkdir(parents=True, exist_ok=True)
-    name = f'islander-{args.version}-linux-{args.arch}'
-    outputs = [output / (name + '.tar.gz')]
+    name = f'islander-{args.version}-{args.os}-{args.arch}'
+    outputs = [output / (name + ('.zip' if args.os == 'windows' else '.tar.gz'))]
+    if args.os == 'windows':
+        outputs.append(output / (name + '.exe'))
     if args.appimage:
         outputs.append(output / (name + '.AppImage'))
     if any(p.exists() for p in outputs):
         parser.error('目标产物已存在；请先移动旧文件，避免覆盖已发布版本')
-    env = dict(os.environ, CGO_ENABLED='0', GOOS='linux', GOARCH=ARCHES[args.arch])
+    env = dict(os.environ, CGO_ENABLED='0', GOOS=SYSTEMS[args.os], GOARCH=ARCHES[args.arch])
     with tempfile.TemporaryDirectory(prefix=name + '-', dir=build_root) as directory:
         work = Path(directory)
-        binary = work / 'islander'
+        binary = work / ('islander.exe' if args.os == 'windows' else 'islander')
         subprocess.run(['go', 'build', '-trimpath', '-ldflags',
                         f'-s -w -X github.com/A-islander/islander-cli/internal/cli.Version={args.version}',
                         '-o', str(binary), './cmd/islander'], cwd=REPO, env=env, check=True)
-        if platform.system() == 'Linux' and platform.machine() == args.arch:
+        if host_os() == args.os and host_arch() == args.arch:
             actual = subprocess.check_output([str(binary), '--version'], text=True).strip()
             if actual != 'islander version ' + args.version:
                 raise RuntimeError('可执行文件版本与发布版本不符：' + actual)
             subprocess.run([str(binary), '--help'], stdout=subprocess.DEVNULL, check=True)
         archive = work / outputs[0].name
-        with tarfile.open(archive, 'w:gz') as bundle:
-            bundle.add(binary, arcname='islander')
-            bundle.add(REPO / 'README.md', arcname='README.md')
+        if args.os == 'windows':
+            with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
+                bundle.write(binary, arcname='islander.exe')
+                bundle.write(REPO / 'README.md', arcname='README.md')
+            shutil.copy2(binary, work / outputs[1].name)
+        else:
+            with tarfile.open(archive, 'w:gz') as bundle:
+                bundle.add(binary, arcname='islander')
+                bundle.add(REPO / 'README.md', arcname='README.md')
         if args.appimage:
             appdir = work / 'Islander.AppDir'
             (appdir / 'usr/bin').mkdir(parents=True)
