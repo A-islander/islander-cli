@@ -80,6 +80,9 @@ func (m *model) beginCompose(reply, quote bool) tea.Cmd {
 		}
 		d.BoardID = m.apiBoards[m.board-1].ID
 	}
+	if m.chatStyle && reply && !quote && m.draft.ThreadID == d.ThreadID && m.draft.Cookie == d.Cookie && (m.draft.Body != "" || len(m.draft.Files) > 0 || len(m.draft.Media) > 0) {
+		return m.editDraft()
+	}
 	m.draft = d
 	return m.editDraft()
 }
@@ -92,6 +95,7 @@ func (m *model) editDraft() tea.Cmd {
 	m.editor.CharLimit = 8192
 	m.editor.ShowLineNumbers = false
 	m.editor.Placeholder = "写点什么吧…"
+	m.resizeEditor()
 	return m.editor.Focus()
 }
 func (m *model) syncDraft() { m.draft.Body = m.editor.Value(); m.draft.Title = m.titleInput.Value() }
@@ -244,15 +248,8 @@ func (m *model) selectMenu() tea.Cmd {
 		*m = next.(model)
 		return cmd
 	case "board":
-		m.pendingRestore = nil
-		m.savePosition()
-		m.board, _ = strconv.Atoi(item.Value)
-		m.kind = "timeline"
-		if m.board > 0 {
-			m.kind = "board"
-		}
-		m.filter = ""
-		return m.loadList(1)
+		index, _ := strconv.Atoi(item.Value)
+		return m.chooseBoard(index)
 	case "mine":
 		return m.openMine()
 	case "sage":
@@ -369,6 +366,13 @@ func (m *model) confirm() tea.Cmd {
 	return m.launch("action", func(ctx context.Context, c forum.Backend) (any, error) { return nil, c.Action(ctx, action, id) })
 }
 func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "f6" && (m.modal == "" || m.modal == "compose") {
+		m.toggleChatStyle()
+		return *m, nil, true
+	}
+	if cmd, handled := m.mouseUpdate(msg); handled {
+		return *m, cmd, true
+	}
 	if cmd, handled := m.attachmentUpdate(msg); handled {
 		return *m, cmd, true
 	}
@@ -385,35 +389,6 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.filePicker.entries = result.entries
 			if result.err != nil {
 				m.filePicker.err = result.err.Error()
-			}
-		}
-		return *m, nil, true
-	}
-	if click, ok := msg.(tea.MouseClickMsg); ok {
-		if click.Button == tea.MouseLeft && !m.busy && m.modal == "" && !m.opts.Demo && m.width >= 44 && m.height >= 16 &&
-			click.Y == 3 && click.X >= m.mineButtonX() && click.X < m.width-1 {
-			if !m.capabilities().Mine {
-				m.openSites()
-				return *m, nil, true
-			}
-			return *m, m.openMine(), true
-		}
-		return *m, nil, true
-	}
-	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
-		if m.busy {
-			return *m, nil, true
-		}
-		if m.modal == "publish" {
-			m.popup, _ = m.popup.Update(wheel)
-		} else if m.modal == "" {
-			if m.reading {
-				m.reader, _ = m.reader.Update(wheel)
-				m.syncActivePost()
-			} else if wheel.Button == tea.MouseWheelDown {
-				m.moveSelection(1)
-			} else if wheel.Button == tea.MouseWheelUp {
-				m.moveSelection(-1)
 			}
 		}
 		return *m, nil, true
@@ -888,7 +863,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 				m.menu = append(m.menu, menuItem{a.Type + " · " + a.URL, "attachment", a.URL})
 			}
 			if !m.reading {
-				m.menu = m.previewAttachmentMenu()
+				m.menu = m.selectedThreadAttachments()
 			}
 			if len(m.menu) > 0 {
 				m.modal = "menu"
@@ -971,14 +946,8 @@ func (m model) extendedDialog() (string, bool) {
 	case "confirm":
 		content = strong("确认操作", teal) + "\n\n" + bodyText(m.notice, iw) + "\n\n" + ink("Enter 确认 · Esc 取消", sand)
 	case "menu":
-		content = strong(m.returnModal, teal) + "\n\n"
-		capacity := max(1, m.height-12)
-		if m.cookieNotice != "" && strings.HasPrefix(m.returnModal, "饼干 ·") {
-			note := bodyText(m.cookieNotice, iw)
-			content += ink(note, sand) + "\n\n"
-			capacity = max(1, capacity-lipgloss.Height(note)-1)
-		}
-		start := max(0, m.menuIndex-capacity+1)
+		prefix, start, capacity := m.menuLayout(iw)
+		content = prefix
 		for i := start; i < min(len(m.menu), start+capacity); i++ {
 			s := "  " + clip(m.menu[i].Label, iw-2)
 			if i == m.menuIndex {
@@ -1002,7 +971,7 @@ func (m model) extendedDialog() (string, bool) {
 	case "attachment":
 		content = strong("附件", teal) + "\n\n" + bodyText(m.menu[m.menuIndex].Value, iw) + "\n\n" + ink("Enter 终端预览 · o 系统打开 · s 下载 · Esc 返回", sand)
 	case "live-help":
-		content = strong("上岛指南", teal) + "\n\n" + bodyText("g 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\n› / │ 标记选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F3 颜文字 · F2 编辑历史\nTab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		content = strong("上岛指南", teal) + "\n\n" + bodyText("鼠标：点击选串/楼层 · 双击阅读 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\ng 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\n底色高亮选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F3 颜文字 · F2 编辑历史\nTab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
 		if !m.capabilities().Manage {
 			replyHelp := "发帖、我的内容及管理操作尚未接入。"
 			if m.capabilities().Reply {
@@ -1011,7 +980,7 @@ func (m model) extendedDialog() (string, bool) {
 			if m.capabilities().Publish {
 				replyHelp = "c 发串 · r 回复 · R 引用回复 · d 草稿\nF3 颜文字 · F2 编辑历史\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n我的内容及管理操作尚未接入。"
 			}
-			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("g 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 加载附件 · +/- 小图大小\n[ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("鼠标：点击选串/楼层 · 双击阅读 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\ng 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 加载附件 · +/- 小图大小\n[ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
 		}
 	default:
 		return "", false

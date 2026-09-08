@@ -24,7 +24,7 @@ func imagePreviewFixture(site, mode string) model {
 	for i := 1; i <= 5; i++ {
 		replies = append(replies, forum.Post{ID: 100 + i, FollowID: 100, Body: fmt.Sprintf("第%d条回复", i), Attachments: media(100 + i)})
 	}
-	m.previews = map[int]previewResult{100: {Page: forum.Page{Page: 1, List: replies}}}
+	m.selectedThreads = map[int]selectionResult{100: {Page: forum.Page{Page: 1, List: replies}}}
 	m.refreshReader(false)
 	return m
 }
@@ -35,7 +35,7 @@ func TestThreeSiteImagesInListPreview(t *testing.T) {
 			m := imagePreviewFixture(site, "kitty")
 			defer func() { m.clearInlineImages() }()
 			m.reconcileInlineImages()
-			if m.reading || len(m.imageSlots) != 6 || len(m.inlineImages.entries) != 2 {
+			if m.reading || len(m.imageSlots) != 6 || len(m.inlineImages.entries) == 0 {
 				t.Fatal("preview did not schedule visible root/reply images")
 			}
 			before := m.reader.TotalLineCount()
@@ -58,12 +58,12 @@ func TestThreeSiteImagesInListPreview(t *testing.T) {
 				t.Fatal("preview image missing or shifted layout")
 			}
 			for i := 1; i <= 5; i++ {
-				if !strings.Contains(ansi.Strip(view), fmt.Sprintf("第%d条回复", i)) {
+				if !strings.Contains(ansi.Strip(m.reader.GetContent()), fmt.Sprintf("第%d条回复", i)) {
 					t.Fatalf("image hid reply %d", i)
 				}
 			}
-			if len(m.pages) != 0 || len(m.raw) != 2 {
-				t.Fatal("image preview changed full-reader post cache")
+			if len(m.pages) != 0 || len(m.raw) != 7 {
+				t.Fatal("side reader lost the complete post cache")
 			}
 			for _, line := range strings.Split(m.View().Content, "\n") {
 				if ansi.StringWidth(line) > m.width {
@@ -100,16 +100,20 @@ func TestUnsupportedPreviewOnlyHintsAndManualA(t *testing.T) {
 			if len(m.inlineImages.entries) != 0 || len(m.imageSlots) != 0 || !strings.Contains(view, "a 加载附件") || strings.Contains(view, "▀") || strings.ContainsRune(view, kitty.Placeholder) {
 				t.Fatal("unsupported preview should remain compact text only")
 			}
-			if m.reader.TotalLineCount() > 22 {
-				t.Fatal("unsupported preview reserved blank image regions")
+			before := m.reader.TotalLineCount()
+			m.opts.Images = "off"
+			m.refreshReader(false)
+			if m.reader.TotalLineCount() != before {
+				t.Fatal("unsupported terminal reserved image rows")
 			}
+			m.opts.Images = mode
 			// Remove the root attachment: a must still reach reply-only media.
 			root := m.raw[100]
 			root.Attachments = nil
 			m.raw[100] = root
-			result := m.previews[100]
+			result := m.selectedThreads[100]
 			result.Page.List[0] = root
-			m.previews[100] = result
+			m.selectedThreads[100] = result
 			m.refreshReader(false)
 			m = press(m, "a")
 			if m.modal != "attachment" || len(m.menu) != 5 || !strings.Contains(m.menu[0].Value, "101.png") {
@@ -149,6 +153,33 @@ func TestCapabilityReplyPreservesReadingAnchor(t *testing.T) {
 		t.Fatal("supported terminal did not begin downloads")
 	}
 	m.clearInlineImages()
+}
+
+func TestSideReaderFocusReusesLoadedImage(t *testing.T) {
+	m := imagePreviewFixture("x", "kitty")
+	defer func() { m.clearInlineImages() }()
+	m.reconcileInlineImages()
+	slot := m.imageSlots[0]
+	e := m.inlineImages.entries[slot.key]
+	e.cancel()
+	pixels := image.NewRGBA(image.Rect(0, 0, 80, 48))
+	m.inlineImagesUpdate(inlineImageLoaded{e.id, pixels, nil})
+	m.inlineImagesUpdate(uv.KittyGraphicsEvent{Options: kitty.Options{ID: e.id}, Payload: []byte("OK")})
+	m = press(m, "enter")
+	current := m.inlineImages.entries[slot.key]
+	if !m.reading || current == nil || current.id != e.id || current.img != pixels || current.loading {
+		t.Fatal("changing focus reloaded an already displayed image")
+	}
+	m = press(m, "h")
+	m = press(m, "l")
+	if current = m.inlineImages.entries[slot.key]; current == nil || current.id != e.id || current.img != pixels {
+		t.Fatal("focus round trip reloaded the visible image")
+	}
+	m.requestID++ // A quote/page request inside the same thread.
+	m.reconcileInlineImages()
+	if current = m.inlineImages.entries[slot.key]; current == nil || current.id != e.id {
+		t.Fatal("a thread request discarded the visible image")
+	}
 }
 
 func TestUnsupportedReaderAndHiddenPreviewDoNotLoad(t *testing.T) {

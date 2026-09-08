@@ -112,7 +112,9 @@ func (m *model) displayPost(p forum.Post) post {
 }
 func (m *model) displayThread(p forum.Post) thread {
 	title := forum.Clean(p.Title)
+	excerpt := strings.ReplaceAll(forum.Clean(p.Body), "\n", " ")
 	if title == "" {
+		excerpt = ""
 		title = strings.ReplaceAll(forum.Clean(p.Body), "\n", " ")
 		if p.FollowID > 0 {
 			title = "↳ 回复 No." + strconv.Itoa(p.FollowID) + " · " + title
@@ -128,9 +130,10 @@ func (m *model) displayThread(p forum.Post) thread {
 	if board == "" {
 		board = m.boardLabel(p.BoardID)
 	}
-	return thread{p.ID, board, title, strings.ReplaceAll(forum.Clean(p.Body), "\n", " "), []post{m.displayPost(p)}}
+	return thread{p.ID, board, title, excerpt, []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
+	m.loadedThreadID = 0
 	m.listWindow = newPageWindow(p)
 	m.threadWindow = pageWindow{}
 	m.stateReady = true
@@ -195,6 +198,7 @@ func (m *model) leaveReading() {
 	m.refreshReader(false)
 }
 func (m *model) loadList(page int) tea.Cmd {
+	m.loadedThreadID = 0
 	m.listError = ""
 	kind, id := m.kind, 0
 	if m.board > 0 && m.board <= len(m.apiBoards) {
@@ -233,6 +237,7 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 	})
 }
 func (m *model) applyThread(r threadResult) {
+	m.loadedThreadID = r.Root.ID
 	m.threadWindow = newPageWindow(r.Page)
 	m.stateReady = true
 	m.readVisited = time.Now().UnixNano()
@@ -256,7 +261,6 @@ func (m *model) applyThread(r threadResult) {
 	m.activePost = 0
 	m.activeQuote = ""
 	m.refreshReader(true)
-	m.syncActivePost()
 	if r.Target > 0 {
 		for i, p := range t.posts {
 			if p.id == r.Target {

@@ -6,20 +6,44 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/A-islander/islander-cli/internal/forum"
 	"github.com/A-islander/islander-cli/internal/local"
 	"github.com/charmbracelet/x/ansi"
 )
 
+func readerItemHighlighted(m model, item readerItem) bool {
+	lines := strings.Split(m.reader.GetContent(), "\n")
+	canvas := lipgloss.NewCanvas(m.reader.Width(), 1).Compose(lipgloss.NewLayer(lines[item.line]))
+	cell := canvas.CellAt(min(item.depth, 4)*2, 0)
+	if cell.Style.Bg == nil {
+		return false
+	}
+	r, g, b, _ := cell.Style.Bg.RGBA()
+	wr, wg, wb, _ := lipgloss.Color(selectedBG).RGBA()
+	return r == wr && g == wg && b == wb
+}
+
 func assertSelectedPost(t *testing.T, m model, id int) {
 	t.Helper()
-	content := ansi.Strip(m.reader.GetContent())
-	marker := fmt.Sprintf("› No.%d", id)
-	if !strings.Contains(content, marker) || strings.Count(content, "› No.") != 1 {
-		t.Fatalf("expected one selected post %s", marker)
+	p, ok := m.selectedPost()
+	if !ok || p.id != id {
+		t.Fatalf("wrong selected post: %+v", p)
 	}
-	if !strings.Contains(ansi.Strip(m.reader.View()), marker) {
-		t.Fatalf("selected header %s is outside the viewport", marker)
+	selected := 0
+	for _, item := range m.readerItems {
+		if readerItemHighlighted(m, item) {
+			selected++
+			if item.key != m.selectedKey() {
+				t.Fatal("highlight belongs to another post")
+			}
+		}
+	}
+	if selected != 1 {
+		t.Fatalf("expected one highlighted post, got %d", selected)
+	}
+	if !strings.Contains(ansi.Strip(m.reader.View()), fmt.Sprintf("No.%d", id)) {
+		t.Fatal("selected header is outside the viewport")
 	}
 }
 
@@ -47,8 +71,10 @@ func TestVisibleFloorSelection(t *testing.T) {
 		m = press(m, "up")
 		assertSelectedPost(t, m, m.current().posts[2].id)
 		m = press(m, "esc")
-		if strings.Contains(ansi.Strip(m.reader.GetContent()), "› No.") {
-			t.Fatal("reader kept focus marker after returning to list")
+		for _, item := range m.readerItems {
+			if readerItemHighlighted(m, item) {
+				t.Fatal("reader kept highlight after returning to list")
+			}
 		}
 		m = press(m, "enter")
 		assertSelectedPost(t, m, m.current().posts[2].id)
@@ -60,13 +86,13 @@ func TestScrollKeepsVisiblePostSelected(t *testing.T) {
 	m.current().posts[0].body = strings.Repeat("长正文 (ﾟДﾟ)\n", 80)
 	m.refreshReader(false)
 	m, _ = updateKey(m, tea.KeyPgDown, 0)
-	if m.activePost != 0 || m.reader.YOffset() == 0 || !strings.Contains(ansi.Strip(m.reader.View()), "│ 长正文") {
+	if m.activePost != 0 || m.reader.YOffset() == 0 || !strings.Contains(ansi.Strip(m.reader.View()), "长正文") {
 		t.Fatal("long selected post lost its visible gutter while scrolling")
 	}
 	for range 12 {
 		m, _ = updateKey(m, tea.KeyPgDown, 0)
 	}
-	if m.activePost == 0 || !strings.Contains(ansi.Strip(m.reader.GetContent()), fmt.Sprintf("› No.%d", m.current().posts[m.activePost].id)) {
+	if m.activePost == 0 || !strings.Contains(ansi.Strip(m.reader.GetContent()), fmt.Sprintf("No.%d", m.current().posts[m.activePost].id)) {
 		t.Fatal("scrolling did not update selection")
 	}
 }
@@ -132,4 +158,40 @@ func TestReloadAndJumpRestoreSelection(t *testing.T) {
 	r.Target = 102
 	m.applyThread(r)
 	assertSelectedPost(t, m, 102)
+}
+
+func TestSelectedPostBackgroundCoversBodyAndPadding(t *testing.T) {
+	m := press(newModel(), "enter")
+	m.current().posts[0].body = "第一行 (ﾟДﾟ)\n\n" + strings.Repeat("长回复正文\n", 60)
+	m.refreshReader(false)
+	item := m.readerItems[0]
+	canvas := lipgloss.NewCanvas(m.reader.Width(), item.end).Compose(lipgloss.NewLayer(m.reader.GetContent()))
+	wantR, wantG, wantB, _ := lipgloss.Color(selectedBG).RGBA()
+	for y := item.line; y < item.end; y++ {
+		for x := 0; x < m.reader.Width(); x++ {
+			cell := canvas.CellAt(x, y)
+			if cell.Width == 0 {
+				continue
+			}
+			if cell.Style.Bg == nil {
+				t.Fatalf("selected post lost background at %d,%d", x, y)
+			}
+			r, g, b, _ := cell.Style.Bg.RGBA()
+			if r != wantR || g != wantG || b != wantB {
+				t.Fatalf("selected post has wrong background at %d,%d", x, y)
+			}
+		}
+	}
+	m.reader.SetYOffset(10)
+	canvas = lipgloss.NewCanvas(m.reader.Width(), m.reader.Height()).Compose(lipgloss.NewLayer(m.reader.View()))
+	for y := 0; y < m.reader.Height(); y++ {
+		cell := canvas.CellAt(m.reader.Width()-1, y)
+		if cell.Style.Bg == nil {
+			t.Fatal("scrolling removed the body background")
+		}
+		r, g, b, _ := cell.Style.Bg.RGBA()
+		if r != wantR || g != wantG || b != wantB {
+			t.Fatal("scrolled body has a different background")
+		}
+	}
 }

@@ -185,7 +185,7 @@ func (m model) updatePersistent(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.navigation()
 	oldBody, oldTitle := m.editor.Value(), m.titleInput.Value()
 	oldFiles := fmt.Sprint(m.draft.Files, m.draft.Media)
-	next, cmd := m.updateWithPreview(msg)
+	next, cmd := m.updateWithSelection(msg)
 	n := next.(model)
 	n.syncPagingPosition()
 	var tasks []tea.Cmd
@@ -278,43 +278,47 @@ func (m *model) resumeAfterList() tea.Cmd {
 func (m *model) resumeThread(n local.Navigation) tea.Cmd {
 	m.pendingRestore = &n
 	return m.launch("resume-thread", func(ctx context.Context, c forum.Backend) (any, error) {
-		root, err := c.Post(ctx, n.ThreadID)
-		if err != nil {
-			return nil, err
-		}
-		page := max(1, n.ReadPage)
-		p, err := c.List(ctx, "thread", n.ThreadID, page)
-		if page > 1 && (err != nil || len(p.List) == 0) {
-			p, err = c.List(ctx, "thread", n.ThreadID, 1)
-		}
-		if err != nil {
-			return nil, err
-		}
-		hasAnchor := func(p forum.Page) bool {
-			for _, post := range p.List {
-				if post.ID == n.AnchorID {
-					return true
-				}
-			}
-			return false
-		}
-		if n.AnchorID > 0 && !hasAnchor(p) {
-			for _, neighbor := range []int{p.Page - 1, p.Page + 1} {
-				if neighbor < 1 || (neighbor > p.Page && !p.HasMore) {
-					continue
-				}
-				other, e := c.List(ctx, "thread", n.ThreadID, neighbor)
-				if e == nil && hasAnchor(other) {
-					p = other
-					break
-				}
-			}
-		}
-		if p.Root != nil {
-			root = *p.Root
-		}
-		return threadResult{Root: root, Page: p, Target: n.AnchorID}, nil
+		return fetchRestoredThread(ctx, c, n)
 	})
+}
+
+func fetchRestoredThread(ctx context.Context, c forum.Backend, n local.Navigation) (threadResult, error) {
+	root, err := c.Post(ctx, n.ThreadID)
+	if err != nil {
+		return threadResult{}, err
+	}
+	page := max(1, n.ReadPage)
+	p, err := c.List(ctx, "thread", n.ThreadID, page)
+	if page > 1 && (err != nil || len(p.List) == 0) {
+		p, err = c.List(ctx, "thread", n.ThreadID, 1)
+	}
+	if err != nil {
+		return threadResult{}, err
+	}
+	hasAnchor := func(p forum.Page) bool {
+		for _, post := range p.List {
+			if post.ID == n.AnchorID {
+				return true
+			}
+		}
+		return false
+	}
+	if n.AnchorID > 0 && !hasAnchor(p) {
+		for _, neighbor := range []int{p.Page - 1, p.Page + 1} {
+			if neighbor < 1 || (neighbor > p.Page && !p.HasMore) {
+				continue
+			}
+			other, e := c.List(ctx, "thread", n.ThreadID, neighbor)
+			if e == nil && hasAnchor(other) {
+				p = other
+				break
+			}
+		}
+	}
+	if p.Root != nil {
+		root = *p.Root
+	}
+	return threadResult{Root: root, Page: p, Target: n.AnchorID}, nil
 }
 
 func (m *model) applyRestoredThread(r threadResult) {
@@ -411,9 +415,12 @@ func (m *model) openDraftEdits() tea.Cmd {
 	return nil
 }
 
-// Explicit reply links keep their target semantics. Main-thread entries resume
-// using persisted positions, independent of the preview page cached in memory.
+// Focus changes reuse the active reader or side-reader cache. Persisted positions
+// are the fallback when this thread has not been loaded during this session.
 func (m *model) openThread(id int) tea.Cmd {
+	if m.enterSelectedThread(id) {
+		return nil
+	}
 	if m.store != nil {
 		b, err := m.store.Browsing(m.identity.Alias)
 		if err != nil {

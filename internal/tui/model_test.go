@@ -99,7 +99,7 @@ func TestBoardAndNarrowNavigation(t *testing.T) {
 		t.Fatal("narrow screen should be single column")
 	}
 	m = press(m, "enter")
-	if !strings.Contains(ansi.Strip(m.View().Content), "正在阅读") {
+	if !m.reading || !strings.Contains(ansi.Strip(m.View().Content), "主楼") {
 		t.Fatal("reader missing")
 	}
 	m = press(m, "n")

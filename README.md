@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.5**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.6**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.5
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.6
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.5-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.5-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.5-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.5-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.5-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.5-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.6-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.6-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.6-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.6-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.6-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.6-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.5-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.6-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.5-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.5-linux-x86_64.AppImage
-./islander-v0.0.5-linux-x86_64.AppImage
-./islander-v0.0.5-linux-x86_64.AppImage --version
-./islander-v0.0.5-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.6-linux-x86_64.AppImage
+./islander-v0.0.6-linux-x86_64.AppImage
+./islander-v0.0.6-linux-x86_64.AppImage --version
+./islander-v0.0.6-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -107,7 +107,7 @@ islander --site x tui
 islander --site bog tui
 ```
 
-宽屏列表右侧自动显示主楼及第一页最多五条回复摘要；选串停留片刻后加载，快速移动时取消旧请求。长内容和更多回复按 `Enter` 阅读完整串，预览不改变已保存的阅读位置。
+宽屏选串时，右栏直接请求串的第一页（有阅读记录则读取上次页码），显示完整正文与本页全部回复，不再裁成摘要或限制五条。快速移动时取消旧请求；`Enter` / `Tab` 切到右栏阅读，已加载的页面直接复用。已有阅读记录会在右栏加载时恢复；`l` / `→` / `Enter` 进入、`h` / `←` 返回仅切换焦点，保留已加载页面和滚动位置。长串按页加载，可自动翻页或按 `P` 跳页。
 
 TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`P` 按页码跳转，边界处继续浏览可自动加载相邻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛并恢复每岛阅读位置；首次启动及普通 CLI 默认仍为岛民岛。
 
@@ -179,13 +179,15 @@ v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问
 
 数据根目录为 Linux 的 `~/.config/islander/`（支持 `XDG_CONFIG_HOME`）、macOS 的 `~/Library/Application Support/islander/`、Windows 的 `%AppData%/islander/`，也可用 `--data-dir` 指定。根目录的 `preferences.json` 保存当前岛，各站哈希目录的 `browsing.json` 保存导航、历史和收藏，`draft-*.json` 保存草稿与快照。完整规则见 [状态持久化 spec](docs/specs/persistent-forum-state.md)。
 
-鼠标模式支持滚轮浏览、自动加载相邻页和部分顶部按钮点击。编辑器可用 `Shift+方向键` 选中文本、`Ctrl+G` 全选、`Ctrl+Shift+C` 复制选区、`Ctrl+V` 粘贴到光标处；复制粘贴依赖终端/系统剪贴板支持，若快捷键被终端截获，按终端配置执行。论坛正文尚无应用内鼠标选区复制功能。
+鼠标支持左侧单击选串、双击进入阅读，右侧单击选楼层、右键打开操作菜单；滚轮跟随鼠标所在栏，并支持边界自动翻页。板块标签、我的内容、菜单项、引用提示、附件和页码均可点击。编辑器可用 `Shift+方向键` 选中文本、`Ctrl+G` 全选、`Ctrl+Shift+C` 复制选区、`Ctrl+V` 粘贴到光标处；复制粘贴依赖终端/系统剪贴板支持，若快捷键被终端截获，按终端配置执行。论坛正文尚无应用内鼠标选区复制功能。
+
+顶部 **`F6 Agent模拟切换`** 按钮（或按 `F6`）切换为 Codex 风格的独立对话页面：深灰底、白灰文字，隐藏论坛顶栏、板块标签、标语和常驻快捷键提示，隐藏作者 ID、帖子编号、楼层和时间，以通用文件读取记录及随机穿插的 `Ran …` 工具输出模拟对话过程。命令块对命令、参数、路径、字符串和输出分别配色。输入区上方显示 `Working (4m 31s • esc to interrupt)`：进入帖子开始计时，Working 高光从左向右循环扫过，退出阅读停止。工具输出仅为预设文字，同次运行内位置稳定，不执行其中的命令；正文引用编号在浏览时显示为 `[reference]`，原始内容和回复目标保留。底部保留 `›` 输入区与模拟状态行 `gpt-6-astra high · ~/Develope/islander · Main [default]`。点击输入区或按 `r` 回复，`R` 引用选中楼层；Enter 换行，`Ctrl+P` 预览、确认页 Enter 发送，Esc 保存草稿，颜文字和附件选择沿用。按 **F6** 返回论坛，阅读位置与编辑内容保留；`b` 板块、`g` 切岛等按键在模拟页仍有效。模型、目录和分支文字是模拟装饰，不调用 AI，也不读取本机 Git 状态。模式选择仅在本次运行有效。见 [鼠标和 Agent 模拟 spec](docs/specs/mouse-agent-style.md)。
 
 顶部常驻 **`m 我的内容`** 按钮，可鼠标点击或按 `m` 打开当前饼干的发串与回复列表。访客会先进入饼干选择，选择／导入后继续打开。页面显示饼干别名；选中回复后按 `Enter` 定位原串，`Esc` 返回原来的列表位置。`[` / `]` 翻页，`i` 切换饼干。
 
 v0.0.4 支持连续浏览：读到已加载内容底部继续按 `j/↓`、滚轮或 PgDn，自动接上下一页；回到顶部继续向上可补载上一页，保留已有内容并去重。`n/p` 直接换楼也可跨页。`P` 打开页码输入，显示当前页与已知总页数；总数未知时明确标注。窗口内 `Ctrl+Home` 首页，已知总数时 `Ctrl+End` 末页、串内 `Ctrl+L` 最新回复。加载失败保留原位置，用 `[ ]` 或 `P` 手动重试；本地筛选或页内最新排序时暂停列表自动加载。详见 [翻页规格](docs/specs/continuous-pagination.md)。
 
-阅读区用 `›`、标题底色和正文左侧竖线标记当前选中的楼层。用 `↑↓ / j k` 浏览：当前楼层超出屏幕时逐行滚动，尾部完整显示后才进入下一条；向上返回长楼层时从尾部继续往上读。`n/p` 直接跳原串楼层；`PgUp/PgDn` 或空格可快速滚动。按 `Enter` 打开选中帖子的操作菜单，引用、SAGE、附件和删除等操作均针对该楼层，菜单和确认页会显示目标编号。
+左侧选中的串卡片和右侧当前楼层都使用整块背景高亮，右侧正文、附件和引用提示一并高亮；回复不再预留左侧光标和竖线的位置，正文使用完整可用宽度。右栏顶部显示板块名和串号，保留帖子间距，帖子内部的编号、标题、正文、附件提示直接换行，不额外插入空行；正文中的连续换行及只含空格的空行在浏览时压为一次换行，原始正文和编辑内容保持不变；帖子末尾及底部状态栏上方也不额外留空行；左侧有标题的串占 4 行（标题、信息、摘要、间隔）；无标题的串用正文代替标题，占 3 行（正文、信息、间隔），列表按实际行数滚动和翻屏。用 `↑↓ / j k` 浏览：先在屏幕内移动选中楼层；下一楼未完整显示时，只滚动到能完整展示该楼的位置。超过一屏的长楼层从开头显示，再逐行滚动，尾部完整显示后才进入下一条；向上返回长楼层时从尾部继续往上读。`n/p` 直接跳原串楼层；`PgUp/PgDn` 或空格可快速滚动。按 `Enter` 打开选中帖子的操作菜单，引用、SAGE、附件和删除等操作均针对该楼层，菜单和确认页会显示目标编号。
 
 按 `v` 在帖子下方原位展开引用，多条引用会一起列出。用 `↓` 选中展开的引用，再按 `v` 可继续查看它的引用；选中父帖按 `v` 收起该分支，`Esc / ← / h` 从引用返回上层并恢复阅读位置。`↑↓ / j k` 遍历正文及展开的引用，`n/p` 只切换原串楼层。选中引用时，`R` 引用该帖并回复当前串，SAGE 和附件操作也对应选中的引用。循环引用不继续展开，最多展开 12 层。
 
@@ -226,9 +228,9 @@ v0.0.4 支持连续浏览：读到已加载内容底部继续按 `j/↓`、滚�
 
 ## 附件
 
-v0.0.5 新增自动小图：终端支持图片时，三个岛的串预览、正文及展开的引用均显示小图。串预览把首张小图放在正文旁边，默认保留五条回复的文字；进入串后多图依次排列。`+` / `-` 调整小图大小（`=` 也可放大），已加载的图片复用缓存。小图靠近阅读位置时加载，优先使用站点缩略图；加载前后预留相同高度，避免正文跳动。
+终端支持图片时，三个岛的右栏正文及展开的引用均显示小图，多图依次排列。`+` / `-` 调整小图大小（`=` 也可放大），已加载的图片复用缓存。小图靠近阅读位置时加载，优先使用站点缩略图；加载前后预留相同高度，避免正文跳动。
 
-终端未确认支持图片时，串预览与正文只显示 `a 加载附件`，不会自动下载图片或显示字符图。按 `a` 后才加载附件，必要时在附件窗口降级字符预览。串预览中的 `a` 包含主楼和已展示回复的附件，左右键切换；进入串后仍只查看选中楼层或引用的附件。`--images blocks` 也只在手动打开附件时显示字符图。
+终端未确认支持图片时，右栏正文只显示 `a 加载附件`，不会自动下载图片或显示字符图。按 `a` 后才加载附件，必要时在附件窗口降级字符预览。列表焦点下的 `a` 包含主楼和已加载这一页回复的附件，左右键切换；进入串后仍只查看选中楼层或引用的附件。`--images blocks` 也只在手动打开附件时显示字符图。
 
 从 v0.0.3 起，按 `a` 直接在 TUI 内打开选中帖子或引用的首张附件，无须先进入附件列表。窗口内可用：
 
@@ -325,20 +327,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.5
+make release VERSION=v0.0.6
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.5 --arch aarch64
+python3 scripts/package.py --version v0.0.6 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.5 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.5 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.6 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.6 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

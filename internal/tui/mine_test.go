@@ -52,10 +52,10 @@ func TestMineButtonAndReplyRoundTrip(t *testing.T) {
 		m.client, _ = forum.New(server.URL, server.URL, "test-cookie")
 		m.filter = "旧筛选不应隐藏我的回复"
 		view := m.View()
-		if view.MouseMode != tea.MouseModeCellMotion || !strings.Contains(ansi.Strip(strings.Split(view.Content, "\n")[3]), "m 我的内容") {
+		if view.MouseMode != tea.MouseModeCellMotion || !strings.Contains(ansi.Strip(strings.Split(view.Content, "\n")[2]), "m 我的内容") {
 			t.Fatal("mine button is not visible/clickable")
 		}
-		next, cmd := m.Update(tea.MouseClickMsg{X: m.mineButtonX() + 1, Y: 3, Button: tea.MouseLeft})
+		next, cmd := m.Update(tea.MouseClickMsg{X: m.mineButtonX() + 1, Y: 2, Button: tea.MouseLeft})
 		m = applyCommand(next.(model), cmd)
 		if m.kind != "mine" || m.filter != "" || len(m.visible) != 2 || !strings.Contains(ansi.Strip(m.View().Content), "我的内容 · daily") {
 			t.Fatal("mine button did not open personal content")

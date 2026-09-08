@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"github.com/A-islander/islander-cli/internal/forum"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -78,6 +79,9 @@ func panel(content string, width, height int, focused bool) string {
 // Lip Gloss style. Resolve defaults after composition so text, padding and
 // borders use the same background, even with a different terminal theme.
 func screenView(width, height int, layers ...*lipgloss.Layer) tea.View {
+	return themedScreenView(width, height, false, layers...)
+}
+func themedScreenView(width, height int, agent bool, layers ...*lipgloss.Layer) tea.View {
 	canvas := lipgloss.NewCanvas(width, height).Compose(lipgloss.NewCompositor(layers...))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -92,6 +96,10 @@ func screenView(width, height int, layers ...*lipgloss.Layer) tea.View {
 			if cell.Style.Fg == nil {
 				cell.Style.Fg = lipgloss.Color(foam)
 			}
+			if agent {
+				cell.Style.Bg = agentColor(cell.Style.Bg)
+				cell.Style.Fg = agentColor(cell.Style.Fg)
+			}
 			canvas.SetCell(x, y, cell)
 		}
 	}
@@ -102,6 +110,28 @@ func screenView(width, height int, layers ...*lipgloss.Layer) tea.View {
 
 func bodyText(body string, width int) string {
 	return ink(wrapText(body, width), foam)
+}
+
+// Compact forum content only; keep drafts and source posts untouched.
+func compactPostBody(body string) string {
+	lines := strings.Split(body, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+var sgrPattern = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
+
+// Nested text styles reset the background too. Reapply the selection color
+// after each SGR sequence, preserving foreground colors (including Kitty IDs).
+func highlightLine(content string, width int) string {
+	bg := ansi.NewStyle().BackgroundColor(lipgloss.Color(selectedBG)).String()
+	content = rectangle(content, width, 1)
+	return bg + sgrPattern.ReplaceAllStringFunc(content, func(s string) string { return s + bg }) + ansi.ResetStyle
 }
 
 func (m model) mineButton() string {
@@ -122,13 +152,16 @@ func (m *model) threadContent(t thread) string {
 	render = func(p post, key string, root, depth int, title, failure string) {
 		start := len(lines)
 		itemIndex := len(m.readerItems)
-		m.readerItems = append(m.readerItems, readerItem{key: key, post: p, root: root, depth: depth, line: start})
+		m.readerItems = append(m.readerItems, readerItem{key: key, post: p, root: root, depth: depth, line: start, quoteLine: -1})
 		indent := strings.Repeat("  ", min(depth, 4))
-		w := max(1, m.reader.Width()-2-len(indent))
+		w := max(1, m.reader.Width()-len(indent))
+		if m.chatStyle {
+			w = max(1, w-2)
+		}
 		floor := fmt.Sprintf("%02d 楼", root)
-		if page, ok := m.pages[t.id]; ok {
+		if page, ok := m.displayedThreadPage(t.id); ok {
 			index := root
-			if pos, exists := m.threadWindow.positions[p.id]; exists {
+			if pos, exists := m.threadWindow.positions[p.id]; (m.reading || m.hasLoadedThread()) && exists {
 				page, index = m.threadWindow.pages[pos.page], pos.index
 			}
 			if page.Offset < 0 {
@@ -148,47 +181,81 @@ func (m *model) threadContent(t thread) string {
 			floor = fmt.Sprintf("引用 · %d 层", depth)
 		}
 		meta := strong(fmt.Sprintf("No.%d", p.id), teal) + "  " + ink(p.author, sand)
-		lines = append(lines, row(meta, ink(floor+" · "+p.time, muted), w), "")
+		marker := "• "
+		if isOP {
+			marker = "› "
+		}
+		if !m.chatStyle {
+			lines = append(lines, row(meta, ink(floor+" · "+p.time, muted), w))
+		}
+		if m.chatStyle {
+			title = agentDisplayText(title)
+		}
 		if depth == 0 && isOP && title != "" {
 			lines = append(lines, strings.Split(strong(wrapText(title, w), foam), "\n")...)
-			lines = append(lines, "")
 		}
 		if failure != "" {
 			lines = append(lines, strings.Split(bodyText("无法读取引用："+failure+"\n返回上层收起后可重试。", w), "\n")...)
 		} else if p.deleted {
 			lines = append(lines, ink("[这条回复已被删除]", muted))
-		} else {
-			lines = append(lines, strings.Split(bodyText(p.body, w), "\n")...)
+		} else if body := compactPostBody(p.body); body != "" {
+			if m.chatStyle {
+				body = agentDisplayText(body)
+			}
+			lines = append(lines, strings.Split(bodyText(body, w), "\n")...)
 		}
+		m.readerItems[itemIndex].attachmentFrom = len(lines)
 		if p.attachment != "" {
-			lines = append(lines, "")
 			lines = append(lines, strings.Split(ink(wrapText("▧ "+p.attachment, w), sand), "\n")...)
 		}
 		lines = append(lines, m.inlineImageLines(p, key, w, len(lines))...)
+		m.readerItems[itemIndex].attachmentTo = len(lines)
 		if ids := m.quoteIDs(p); len(ids) > 0 {
 			label := fmt.Sprintf("▸ %d 条引用 · v 展开", len(ids))
 			if _, open := m.inlineQuotes[key]; open {
 				label = fmt.Sprintf("▾ %d 条引用 · v 收起", len(ids))
 			}
-			lines = append(lines, "", ink(clip(label, w), teal))
+			if m.chatStyle {
+				label = "  └ Read related context"
+				if _, open := m.inlineQuotes[key]; open {
+					label = "  └ Collapse related context"
+				}
+			}
+			m.readerItems[itemIndex].quoteLine = len(lines)
+			lines = append(lines, ink(clip(label, w), teal))
+		}
+		if m.chatStyle && len(lines) == start {
+			lines = append(lines, "")
 		}
 		selected := m.reading && ((depth == 0 && m.activeQuote == "" && root == m.activePost) || m.activeQuote == key)
 		for n := start; n < len(lines); n++ {
-			prefix := "  "
-			if selected {
-				prefix = strong("│ ", teal)
+			content := lines[n]
+			lineWidth := w
+			if m.chatStyle {
+				prefix := "  "
 				if n == start {
-					prefix = strong("› ", teal)
-					lines[n] = lipgloss.NewStyle().Background(lipgloss.Color(selectedBG)).Render(rectangle(lines[n], w, 1))
+					prefix = marker
 				}
-			} else if depth > 0 {
-				prefix = ink("│ ", lineColor)
+				content = strong(prefix, foam) + content
+				lineWidth += 2
 			}
-			lines[n] = indent + prefix + lines[n]
+			if selected {
+				content = highlightLine(content, lineWidth)
+			}
+			lines[n] = indent + content
+		}
+		m.readerItems[itemIndex].actionEnd = len(lines)
+		if m.chatStyle && depth == 0 {
+			if tool := m.agentToolLines(key, p.id == t.id, w+2); len(tool) > 0 {
+				lines = append(lines, "")
+				for _, line := range tool {
+					lines = append(lines, indent+line)
+				}
+			}
 		}
 		m.readerItems[itemIndex].end = len(lines)
-		lines = append(lines, "")
 		for _, child := range m.inlineQuotes[key] {
+			lines = append(lines, "")
 			render(child.post, fmt.Sprintf("%s/%d", key, child.post.id), root, depth+1, "", child.err)
 		}
 	}
@@ -199,30 +266,50 @@ func (m *model) threadContent(t thread) string {
 			title = forum.Clean(raw.Title)
 		}
 		render(p, fmt.Sprint(p.id), i, 0, title, "")
-		lines = append(lines, ink(strings.Repeat("─", max(1, m.reader.Width()-2)), lineColor), "")
+		if m.chatStyle {
+			lines = append(lines, "", "")
+		} else {
+			lines = append(lines, ink(strings.Repeat("─", max(1, m.reader.Width())), lineColor), "")
+		}
 	}
 	end := "已经读到串尾了。慢慢来，岛一直在。"
-	page, ok := m.pages[t.id]
-	if m.threadWindow.last > 0 {
+	page, ok := m.displayedThreadPage(t.id)
+	if (m.reading || m.hasLoadedThread()) && m.threadWindow.last > 0 {
 		page, ok = m.threadWindow.pages[m.threadWindow.last]
 	}
 	if ok && page.HasMore {
 		end = "继续向下自动加载 · ] 下一页 · P 跳页"
 	}
 	if !m.opts.Demo {
-		if _, ok := m.pages[t.id]; !ok {
-			end = "Enter 打开串，读取回复"
+		if !ok {
+			end = "正在加载串内容…"
+			if p := m.raw[t.id]; p.FollowID > 0 || p.ParentUnknown {
+				end = "Enter 打开所属串"
+			}
+			if r, loaded := m.selectedThreads[t.id]; !m.reading && loaded && r.Err != nil {
+				end = "读取失败：" + forum.Clean(r.Err.Error()) + " · Enter 重试"
+			}
+		} else if !m.reading && page.HasMore {
+			end = "Enter / Tab 阅读 · 向下自动加载下一页 · P 跳页"
 		}
 	}
-	lines = append(lines, ink(end, muted))
+	if !m.chatStyle {
+		lines = append(lines, ink(end, muted))
+	}
 	lines = append(lines, make([]string, max(0, m.reader.Height()-3))...)
 	return strings.Join(lines, "\n")
 }
 
 func (m model) listPanel() string {
-	w, h := m.listWidth(), m.panelHeight()
+	return m.browsePanel(m.listContent(), m.listWidth(), m.panelHeight(), !m.reading)
+}
+func (m model) listContent() string {
+	w := m.listWidth()
 	iw := w - 6
 	title := strong("岛上此刻", foam)
+	if m.chatStyle {
+		title = strong("对话列表", foam)
+	}
 	if m.kind == "mine" {
 		title = strong("我的内容 · "+m.identity.Alias, teal)
 	}
@@ -241,8 +328,7 @@ func (m model) listPanel() string {
 			lines = append(lines, ink("暂时没有匹配的串。", muted), "", ink("/ 修改筛选 · Esc 清除", teal))
 		}
 	}
-	capacity := max(1, (h-4)/4)
-	for vi := m.listTop; vi < min(len(m.visible), m.listTop+capacity); vi++ {
+	for vi, end := m.listTop, m.listEnd(m.listTop); vi < end; vi++ {
 		t := m.threads[m.visible[vi]]
 		prefix := "  "
 		if vi == m.selected {
@@ -251,35 +337,49 @@ func (m model) listPanel() string {
 		if m.isFavorite(t.id) {
 			prefix += "★ "
 		}
-		first := clip(prefix+t.title, iw)
+		title, excerptText := t.title, t.excerpt
+		if m.chatStyle {
+			title, excerptText = agentDisplayText(title), agentDisplayText(excerptText)
+		}
+		first := clip(prefix+title, iw)
 		meta := clip(fmt.Sprintf("  %s · No.%d · %d 回复", t.board, t.id, m.replyCount(t)), iw)
-		excerpt := clip("  "+t.excerpt, iw)
+		if m.chatStyle {
+			meta = ink("  └ Read local context", muted)
+		}
+		excerpt := clip("  "+excerptText, iw)
 		if vi == m.selected {
 			style := lipgloss.NewStyle().Background(lipgloss.Color(selectedBG)).Width(iw)
 			lines = append(lines, style.Foreground(lipgloss.Color(teal)).Bold(true).Render(first),
-				style.Foreground(lipgloss.Color(foam)).Render(meta), style.Foreground(lipgloss.Color(muted)).Render(excerpt))
+				style.Foreground(lipgloss.Color(foam)).Render(meta))
+			if m.listItemHeight(vi) == 4 {
+				lines = append(lines, style.Foreground(lipgloss.Color(muted)).Render(excerpt))
+			}
 		} else {
-			lines = append(lines, ink(first, foam), ink(meta, muted), ink(excerpt, muted))
+			lines = append(lines, ink(first, foam), ink(meta, muted))
+			if m.listItemHeight(vi) == 4 {
+				lines = append(lines, ink(excerpt, muted))
+			}
 		}
 		lines = append(lines, "")
 	}
-	return panel(strings.Join(lines, "\n"), w, h, !m.reading)
+	return strings.Join(lines, "\n")
 }
 
 func (m model) readerPanel() string {
 	w, h := m.readerWidth(), m.panelHeight()
 	t := m.current()
 	if t == nil {
-		return panel("\n"+ink("海面很安静。\n换个板块，或清除筛选再看看。", muted), w, h, m.reading)
+		return m.browsePanel("\n"+ink("海面很安静。\n换个板块，或清除筛选再看看。", muted), w, h, m.reading)
 	}
-	label := "串预览"
-	if m.reading {
-		label = "正在阅读"
-	}
+	label := t.board
 	if m.isFavorite(t.id) {
 		label += " ★"
 	}
-	header := row(strong(label, teal), ink(t.board+" / "+fmt.Sprintf("No.%d", t.id), muted), w-6)
+	header := row(strong(label, teal), ink(fmt.Sprintf("No.%d", t.id), muted), w-6)
+	if m.chatStyle {
+		page, _ := m.displayedThreadPage(t.id)
+		header = clip(strong("● Read", teal)+ink(fmt.Sprintf(" thread/No.%d · %s · page %d", t.id, t.board, max(1, page.Page)), muted), w-6)
+	}
 	active, _ := m.selectedPost()
 	status := fmt.Sprintf("› No.%d", active.id)
 	if active.quote != 0 {
@@ -298,14 +398,22 @@ func (m model) readerPanel() string {
 		}
 	}
 	if !m.opts.Demo && !m.reading {
-		position = "Enter 打开完整串"
-		status = "主楼与回复预览"
+		position = "Enter / Tab 阅读"
+		status = "串内容"
+		if page, ok := m.displayedThreadPage(t.id); ok {
+			status = page.Label()
+		} else if r, loaded := m.selectedThreads[t.id]; loaded && r.Err != nil {
+			status = "读取失败"
+			position = "Enter 重试"
+		} else if p := m.raw[t.id]; p.FollowID == 0 && !p.ParentUnknown {
+			status = "正在加载串内容…"
+		}
 	}
 	if m.activeQuote != "" {
 		position = "引用 · Esc 上一层"
 	}
-	content := header + "\n\n" + rectangle(m.reader.View(), w-6, h-6) + "\n\n" + row(ink(status, muted), ink(position, teal), w-6)
-	return panel(content, w, h, m.reading)
+	content := header + "\n" + rectangle(m.reader.View(), w-6, h-4) + "\n" + row(ink(status, muted), ink(position, teal), w-6)
+	return m.browsePanel(content, w, h, m.reading)
 }
 
 func (m model) dialog() string {
@@ -352,35 +460,16 @@ func (m model) View() tea.View {
 	if m.width < 44 || m.height < 16 {
 		return screenView(m.width, m.height, lipgloss.NewLayer(rectangle(name+"\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
 	}
+	if m.chatStyle {
+		return m.agentView()
+	}
 	iw := m.width - 2
-	header := row(badge(name, ocean, teal)+"  "+strong(wordmark, foam), badge(m.environmentLabel(), sand, selectedBG)+"  "+ink(m.identityLabel(), muted), iw)
-	subtitle := ink(slogan, muted)
-	if m.kind == "mine" {
-		subtitle = row(subtitle, ink("我的内容 · "+m.identity.Alias+" · 发串与回复（含删除记录）", teal), iw)
-	}
-	var tabs []string
-	for i, b := range m.boardNames {
-		label := fmt.Sprintf("%d %s", i+1, b)
-		if i == m.board && m.kind != "mine" && m.kind != "sage" {
-			tabs = append(tabs, badge(label, ocean, teal))
-		} else {
-			tabs = append(tabs, ink(" "+label+" ", muted))
-		}
-	}
-	tabline := strings.Join(tabs, " ")
-	if m.width < 65 {
-		tabs = nil
-		for i, b := range m.boardNames {
-			label := fmt.Sprintf("%d%s", i+1, b)
-			if i == m.board && m.kind != "mine" && m.kind != "sage" {
-				label = strong(label, teal)
-			} else {
-				label = ink(label, muted)
-			}
-			tabs = append(tabs, label)
-		}
-		tabline = strings.Join(tabs, " ")
-	}
+	right := badge(m.environmentLabel(), sand, selectedBG) + "  " + ink(m.identityLabel(), muted)
+	mode := m.modeButton()
+	left := badge(name, ocean, teal) + "  " + strong(wordmark, foam) + "  " + ink(slogan, muted)
+	available := iw - ansi.StringWidth(mode) - 2
+	header := row(clip(row(left, right, available), available), mode, iw)
+	tabline := strings.Join(m.boardTabs(), " ")
 	if !m.opts.Demo {
 		button := m.mineButton()
 		tabline = row(clip(tabline, iw-ansi.StringWidth(button)-2), button, iw)
@@ -392,6 +481,9 @@ func (m model) View() tea.View {
 		body = m.readerPanel()
 	} else {
 		body = m.listPanel()
+	}
+	if m.replyBoxHeight() > 0 {
+		body += "\n" + m.agentReplyBox()
 	}
 	help := "b 板块  P 跳页  H 历史  F 收藏  Enter 阅读  a 图片  ? 帮助"
 	if m.reading {
@@ -418,16 +510,16 @@ func (m model) View() tea.View {
 	} else if m.opts.StateWarning != "" {
 		notice = m.opts.StateWarning
 	}
-	content := header + "\n" + subtitle + "\n\n" + clip(tabline, iw) + "\n\n" + body + "\n" + ink(clip(notice, iw), muted) + "\n" + ink(clip(help, iw), teal) + "\n"
+	content := header + "\n\n" + clip(tabline, iw) + "\n" + body + "\n" + ink(clip(notice, iw), muted) + "\n" + ink(clip(help, iw), teal) + "\n"
 	base := lipgloss.NewStyle().Background(lipgloss.Color(ocean)).Foreground(lipgloss.Color(foam)).Padding(0, 1).Render(rectangle(content, iw, m.height))
 	layers := []*lipgloss.Layer{lipgloss.NewLayer(base)}
-	if m.modal != "" {
+	if m.modal != "" && !m.inlineAgentCompose() {
 		dialog := m.dialog()
 		layers = append(layers, lipgloss.NewLayer(dialog).X((m.width-lipgloss.Width(dialog))/2).Y((m.height-lipgloss.Height(dialog))/2).Z(1))
 	}
 	v := screenView(m.width, m.height, layers...)
+	v.MouseMode = tea.MouseModeCellMotion
 	if !m.opts.Demo {
-		v.MouseMode = tea.MouseModeCellMotion
 		v.ReportFocus = true
 	}
 	return v

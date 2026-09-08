@@ -172,9 +172,13 @@ func (m *model) reconcileInlineImages() tea.Cmd {
 	s := &m.inlineImages
 	scope := ""
 	if t := m.current(); t != nil && (m.reading || m.split()) && m.opts.Images != "off" {
-		scope = fmt.Sprintf("%s:%s:%d:%t", m.opts.Site, m.opts.ForumURL, t.id, m.reading)
-		if !m.reading {
+		// Both panes share the same layout. Keep images when entering the
+		// reader and while fetching more pages or quotes inside that thread.
+		scope = fmt.Sprintf("%s:%s:%d", m.opts.Site, m.opts.ForumURL, t.id)
+		if !m.reading && !m.hasLoadedThread() {
 			scope += fmt.Sprintf(":%d", m.requestID)
+		} else if strings.HasPrefix(s.scope, scope+":") {
+			scope = s.scope
 		}
 	}
 	var tasks []tea.Cmd
@@ -195,7 +199,7 @@ func (m *model) reconcileInlineImages() tea.Cmd {
 	// One viewport of prefetch on each side; cap requests and decoded images.
 	top, bottom := m.reader.YOffset()-m.reader.Height(), m.reader.YOffset()+2*m.reader.Height()
 	if !m.reading {
-		top, bottom = 0, m.reader.Height()
+		top, bottom = m.reader.YOffset(), m.reader.YOffset()+m.reader.Height()
 	}
 	wanted := map[string]bool{}
 	var slots []inlineImageSlot
@@ -452,12 +456,21 @@ func (m *model) inlineImagesUpdate(msg tea.Msg) (tea.Cmd, bool) {
 // Run reconciliation after navigation and async results, so downloads never
 // originate in View and obsolete results cannot revive another thread's images.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(agentWorkingTick); ok {
+		cmd := m.advanceAgentWorking(tick)
+		return m, cmd
+	}
 	cmd, handled := m.inlineImagesUpdate(msg)
 	if !handled {
 		next, c := m.updatePersistent(msg)
 		m, cmd = next.(model), c
 	}
-	more := m.reconcileInlineImages()
+	if height := max(1, m.panelHeight()-4); m.reader.Height() != height {
+		m.reader.SetHeight(height)
+		m.refreshReader(false)
+		m.ensureListVisible()
+	}
+	more := tea.Batch(m.reconcileInlineImages(), m.syncAgentWorking(time.Now()))
 	if cmd == nil {
 		return m, more
 	}

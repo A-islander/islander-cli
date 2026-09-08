@@ -15,10 +15,12 @@ type inlineQuote struct {
 	err  string
 }
 type readerItem struct {
-	key               string
-	post              post
-	root, depth, line int
-	end               int // Exclusive end of this post, before child quotes and separators.
+	key                                     string
+	post                                    post
+	root, depth, line                       int
+	attachmentFrom, attachmentTo, quoteLine int
+	actionEnd                               int // End of interactive content, before simulated tool output.
+	end                                     int // Exclusive end of this post, before child quotes and separators.
 }
 type inlineQuoteResult struct {
 	parent string
@@ -86,10 +88,14 @@ func (m *model) moveReaderItem(delta int) {
 	item := m.readerItems[next]
 	m.setReaderItem(item)
 	m.refreshReader(false)
-	offset = item.line
-	if delta < 0 {
+	if delta > 0 {
+		// Reveal the complete reply with the smallest scroll. For a reply
+		// taller than the viewport, start at its header and read down normally.
+		offset = max(offset, min(item.line, item.end-m.reader.Height()))
+	} else {
 		// Re-enter a long previous post at its bottom, then read upwards.
-		offset = max(item.line, item.end-m.reader.Height())
+		// Already visible posts keep their screen position.
+		offset = min(offset, max(item.line, item.end-m.reader.Height()))
 	}
 	m.reader.SetYOffset(offset)
 }

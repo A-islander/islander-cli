@@ -272,7 +272,7 @@ func TestViewportAndMouseCanAutoPage(t *testing.T) {
 		lastPagingItem(&m)
 		var cmd tea.Cmd
 		if key == "wheel" {
-			n, next := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+			n, next := m.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelDown})
 			m, cmd = n.(model), next
 		} else {
 			m, cmd = pagingKey(m, key)

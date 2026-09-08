@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"strings"
 
@@ -15,58 +16,63 @@ import (
 )
 
 type model struct {
-	imageTerminal                               imageTerminal
-	imageZoom                                   int
-	inlineImages                                inlineImageState
-	imageSlots                                  []inlineImageSlot
-	stateReady                                  bool
-	stateError                                  string
-	stateTickID, draftTickID                    uint64
-	pendingRestore                              *local.Navigation
-	readVisited                                 int64
-	newest                                      bool
-	historyEntries                              []local.HistoryEntry
-	favoriteEntries                             []local.HistoryEntry
-	attachmentDirect                            bool
-	draftEdits                                  []forum.Draft
-	kaomojiSelected                             int
-	kaomojiError                                string
-	cookieNotice                                string
-	listWindow, threadWindow                    pageWindow
-	pageJumpError                               string
-	attachment                                  attachmentView
-	jumpSource                                  *thread
-	opts                                        Options
-	store                                       *local.Store
-	client                                      forum.Backend
-	siteConfigs                                 map[string]forum.Site
-	listPage                                    forum.Page
-	previewID, previewGeneration, previewTarget int
-	previewCancel                               context.CancelFunc
-	previews                                    map[int]previewResult
-	identity                                    local.Cookie
-	boardNames                                  []string
-	apiBoards                                   []forum.Board
-	raw                                         map[int]forum.Post
-	pages                                       map[int]forum.Page
-	kind                                        string
-	page, total                                 int
-	listError                                   string
-	busy                                        bool
-	requestID                                   int
-	cancel                                      context.CancelFunc
-	editor                                      textarea.Model
-	titleInput                                  textinput.Model
-	editTitle                                   bool
-	draft                                       forum.Draft
-	menu                                        []menuItem
-	menuIndex                                   int
-	confirmAction                               string
-	confirmID                                   int
-	aliasInput                                  string
-	returnModal                                 string
-	pendingMine                                 bool
-	filePicker                                  fileBrowser
+	chatStyle                                         bool
+	agentSeed                                         uint64
+	agentWorking                                      agentWorkingState
+	lastListClick                                     listClick
+	loadedThreadID                                    int
+	imageTerminal                                     imageTerminal
+	imageZoom                                         int
+	inlineImages                                      inlineImageState
+	imageSlots                                        []inlineImageSlot
+	stateReady                                        bool
+	stateError                                        string
+	stateTickID, draftTickID                          uint64
+	pendingRestore                                    *local.Navigation
+	readVisited                                       int64
+	newest                                            bool
+	historyEntries                                    []local.HistoryEntry
+	favoriteEntries                                   []local.HistoryEntry
+	attachmentDirect                                  bool
+	draftEdits                                        []forum.Draft
+	kaomojiSelected                                   int
+	kaomojiError                                      string
+	cookieNotice                                      string
+	listWindow, threadWindow                          pageWindow
+	pageJumpError                                     string
+	attachment                                        attachmentView
+	jumpSource                                        *thread
+	opts                                              Options
+	store                                             *local.Store
+	client                                            forum.Backend
+	siteConfigs                                       map[string]forum.Site
+	listPage                                          forum.Page
+	selectionID, selectionGeneration, selectionTarget int
+	selectionCancel                                   context.CancelFunc
+	selectedThreads                                   map[int]selectionResult
+	identity                                          local.Cookie
+	boardNames                                        []string
+	apiBoards                                         []forum.Board
+	raw                                               map[int]forum.Post
+	pages                                             map[int]forum.Page
+	kind                                              string
+	page, total                                       int
+	listError                                         string
+	busy                                              bool
+	requestID                                         int
+	cancel                                            context.CancelFunc
+	editor                                            textarea.Model
+	titleInput                                        textinput.Model
+	editTitle                                         bool
+	draft                                             forum.Draft
+	menu                                              []menuItem
+	menuIndex                                         int
+	confirmAction                                     string
+	confirmID                                         int
+	aliasInput                                        string
+	returnModal                                       string
+	pendingMine                                       bool
+	filePicker                                        fileBrowser
 
 	threads                  []thread
 	visible                  []int
@@ -77,6 +83,7 @@ type model struct {
 	input                    textinput.Model
 	modal, filter, notice    string
 	offsets                  map[int]int
+	readerSelections         map[int]string
 	postLines                []int
 	activePost               int
 	activeQuote              string
@@ -90,12 +97,14 @@ func newModel() model {
 	i.CharLimit = 80
 	i.Prompt = "› "
 	m := model{
-		opts: Options{Demo: true}, boardNames: boards, kind: "timeline", page: 1, raw: map[int]forum.Post{}, pages: map[int]forum.Page{}, editor: textarea.New(), titleInput: textinput.New(), threads: demoThreads(), width: 120, height: 36,
+		agentSeed: rand.Uint64(),
+		opts:      Options{Demo: true}, boardNames: boards, kind: "timeline", page: 1, raw: map[int]forum.Post{}, pages: map[int]forum.Page{}, editor: textarea.New(), titleInput: textinput.New(), threads: demoThreads(), width: 120, height: 36,
 		reader: viewport.New(), popup: viewport.New(), input: i,
-		offsets:      make(map[int]int),
-		inlineQuotes: make(map[string][]inlineQuote),
-		quoteOffsets: make(map[string]int),
-		notice:       "欢迎上岛。选一条串，停一会儿。",
+		offsets:          make(map[int]int),
+		readerSelections: make(map[int]string),
+		inlineQuotes:     make(map[string][]inlineQuote),
+		quoteOffsets:     make(map[string]int),
+		notice:           "欢迎上岛。选一条串，停一会儿。",
 	}
 	m.refilter()
 	m.resize(m.width, m.height)
@@ -122,6 +131,7 @@ func (m *model) savePosition() {
 	}
 	if t := m.current(); t != nil {
 		m.offsets[t.id] = m.reader.YOffset()
+		m.readerSelections[t.id] = m.selectedKey()
 	}
 }
 
@@ -142,8 +152,13 @@ func (m *model) refilter() {
 	m.refreshReader(true)
 }
 
-func (m model) split() bool      { return m.width >= 100 && !m.fullscreen }
-func (m model) panelHeight() int { return max(6, m.height-8) }
+func (m model) split() bool { return m.width >= 100 && !m.fullscreen && !m.chatStyle }
+func (m model) panelHeight() int {
+	if m.chatStyle {
+		return max(7, m.height-9)
+	}
+	return max(6, m.height-6)
+}
 func (m model) listWidth() int {
 	if m.split() {
 		return min(43, m.width/3)
@@ -160,13 +175,12 @@ func (m model) readerWidth() int {
 func (m *model) resize(w, h int) {
 	m.width, m.height = w, h
 	m.reader.SetWidth(max(8, m.readerWidth()-6))
-	m.reader.SetHeight(max(1, m.panelHeight()-6))
+	m.reader.SetHeight(max(1, m.panelHeight()-4))
 	m.input.SetWidth(max(8, min(56, w-14)))
 	m.popup.SetWidth(max(8, min(66, w-14)))
 	m.popup.SetHeight(max(1, min(16, h-14)))
 	m.refreshReader(false)
-	m.editor.SetWidth(max(10, min(70, w-14)))
-	m.editor.SetHeight(max(3, min(12, h-16)))
+	m.resizeEditor()
 	m.titleInput.SetWidth(max(10, min(70, w-14)))
 	m.ensureListVisible()
 }
@@ -181,8 +195,8 @@ func (m *model) refreshReader(restore bool) {
 		m.reader.SetContent("")
 		return
 	}
-	if !m.opts.Demo && !m.reading {
-		m.reader.SetContent(m.previewContent(*t))
+	if !m.opts.Demo && !m.reading && !m.hasLoadedThread() {
+		m.reader.SetContent(m.selectedThreadContent(*t))
 		m.reader.GotoTop()
 		return
 	}
@@ -192,17 +206,18 @@ func (m *model) refreshReader(restore bool) {
 	m.activePost = max(0, min(m.activePost, len(t.posts)-1))
 	m.reader.SetContent(m.threadContent(*t))
 	m.reader.SetYOffset(offset)
-}
-
-func (m *model) ensureListVisible() {
-	capacity := max(1, (m.panelHeight()-4)/4)
-	if m.selected < m.listTop {
-		m.listTop = m.selected
+	if restore {
+		// Selection can now sit below the top visible line. Restore it
+		// independently instead of inferring it from the scroll offset.
+		for _, item := range m.readerItems {
+			if item.key == m.readerSelections[t.id] {
+				m.setReaderItem(item)
+				m.refreshReader(false)
+				return
+			}
+		}
+		m.syncActivePost()
 	}
-	if m.selected >= m.listTop+capacity {
-		m.listTop = m.selected - capacity + 1
-	}
-	m.listTop = min(m.listTop, max(0, len(m.visible)-capacity))
 }
 
 func (m *model) moveSelection(delta int) {
@@ -210,11 +225,14 @@ func (m *model) moveSelection(delta int) {
 		return
 	}
 	m.savePosition()
+	previous := m.selected
 	m.selected = max(0, min(len(m.visible)-1, m.selected+delta))
+	if previous != m.selected {
+		m.loadedThreadID = 0
+	}
 	m.activePost = 0
 	m.activeQuote = ""
 	m.refreshReader(true)
-	m.syncActivePost()
 	m.ensureListVisible()
 }
 
@@ -278,7 +296,7 @@ func (m *model) submitInput() {
 						}
 					}
 					m.reading, m.activePost = true, pi
-					m.refreshReader(true)
+					m.refreshReader(false)
 					m.reader.SetYOffset(m.postLines[pi])
 					m.ensureListVisible()
 					m.notice = fmt.Sprintf("已定位 No.%d", id)
@@ -375,6 +393,9 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.refreshReader(false)
 			}
 			return m, nil
+		case "f6":
+			m.toggleChatStyle()
+			return m, nil
 		case "f":
 			m.fullscreen = !m.fullscreen
 			m.resize(m.width, m.height)
@@ -402,9 +423,9 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "up", "k":
 				m.moveSelection(-1)
 			case "pgdown", "ctrl+d":
-				m.moveSelection(max(1, (m.panelHeight()-4)/4))
+				m.moveSelection(m.listPageStep(1))
 			case "pgup", "ctrl+u":
-				m.moveSelection(-max(1, (m.panelHeight()-4)/4))
+				m.moveSelection(m.listPageStep(-1))
 			case "home", "g":
 				m.moveSelection(-len(m.visible))
 			case "end", "G":
