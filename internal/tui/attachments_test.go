@@ -1,13 +1,20 @@
 package tui
 
 import (
+	"bytes"
+	"context"
 	"image"
+	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/A-islander/islander-cli/internal/forum"
+	"github.com/A-islander/islander-cli/internal/media"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
@@ -22,6 +29,39 @@ func attachmentModel() model {
 	m.menu = []menuItem{{"first", "attachment", "https://example.org/a.png"}, {"second", "attachment", "https://example.org/b.png"}}
 	m.openAttachment() // Commands intentionally not executed: no network in this fixture.
 	return m
+}
+
+func TestAttachmentReusesThumbnailCacheAndExplicitlyRefreshes(t *testing.T) {
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 800, 600))); err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.Write(data.Bytes()) }))
+	defer server.Close()
+	dir := t.TempDir()
+	m := newModel()
+	m.opts.Images = "blocks"
+	m.imageCache = media.NewImageCache(dir)
+	if _, err := m.imageCache.LoadThumbnail(context.Background(), server.URL); err != nil {
+		t.Fatal(err)
+	}
+	m.menu = []menuItem{{"image", "attachment", server.URL}}
+	m = applyCommand(m, m.openAttachment())
+	if m.attachment.img == nil || m.attachment.img.Bounds().Dx() != 800 || requests.Load() != 1 {
+		t.Fatal("opening original refetched thumbnail URL or used reduced pixels")
+	}
+	m.closeAttachment()
+	m.imageCache = media.NewImageCache(dir)
+	m = applyCommand(m, m.openAttachment())
+	if m.attachment.img == nil || requests.Load() != 1 {
+		t.Fatal("fresh viewer did not reuse disk cache")
+	}
+	n, cmd := updateKey(m, 'r', 0)
+	m = applyCommand(n, cmd)
+	if m.attachment.img == nil || requests.Load() != 2 {
+		t.Fatal("r did not force a download")
+	}
 }
 
 func TestAttachmentMouseWheelZoom(t *testing.T) {

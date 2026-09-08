@@ -87,6 +87,7 @@ func (m *model) switchSite(id string) tea.Cmd {
 	next.fullscreen = m.fullscreen
 	next.chatStyle = m.chatStyle
 	next.agentSeed = m.agentSeed
+	next.imageCache = m.imageCache
 	next.resize(m.width, m.height)
 	if err = next.setIdentity(""); err != nil {
 		m.notice = err.Error()

@@ -281,6 +281,7 @@ func (m *model) reconcileInlineImages() tea.Cmd {
 		s.entries[slot.key] = &inlineImageEntry{id: id, url: slot.url, cancel: cancel, loading: true, cols: slot.width, rows: slot.height, touched: s.clock}
 		loading++
 		changed = true
+		cache := m.imageCache
 		tasks = append(tasks, func() tea.Msg {
 			defer cancel()
 			select {
@@ -289,9 +290,9 @@ func (m *model) reconcileInlineImages() tea.Cmd {
 			case <-ctx.Done():
 				return inlineImageLoaded{id: id, err: ctx.Err()}
 			}
-			img, err := media.LoadThumbnail(ctx, slot.url)
+			img, err := cache.LoadThumbnail(ctx, slot.url)
 			if err != nil && ctx.Err() == nil && slot.url != slot.original && forum.SafeURL(slot.original) {
-				img, err = media.LoadThumbnail(ctx, slot.original)
+				img, err = cache.LoadThumbnail(ctx, slot.original)
 			}
 			return inlineImageLoaded{id, img, err}
 		})

@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.7**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.8**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.7
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.8
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.7-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.7-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.7-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.7-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.7-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.7-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.8-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.8-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.8-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.8-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.8-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.8-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.7-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.8-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.7-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.7-linux-x86_64.AppImage
-./islander-v0.0.7-linux-x86_64.AppImage
-./islander-v0.0.7-linux-x86_64.AppImage --version
-./islander-v0.0.7-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.8-linux-x86_64.AppImage
+./islander-v0.0.8-linux-x86_64.AppImage
+./islander-v0.0.8-linux-x86_64.AppImage --version
+./islander-v0.0.8-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -246,6 +246,10 @@ v0.0.4 支持连续浏览：读到已加载内容底部继续按 `j/↓`、滚�
 
 可用 `--images auto|kitty|blocks|off` 手动控制。原图预览支持 Go 解码的 PNG、JPEG 和 GIF 首帧，限制 20 MB／3200 万像素；其他格式可以外部打开。视频、音频不在终端中播放。图片预览在当前 TUI 内异步加载。默认查询终端能力，确认支持后使用 Kitty 图形协议的 Unicode 占位方式显示；未确认支持时，仅在按 `a` 打开的附件窗口显示彩色字符预览。切换或关闭图片会取消旧请求并清理对应图片，窗口缩放自动适配。
 
+TUI 的串内小图和原图默认使用磁盘缓存，换串、切岛和重启后可复用。按完整 URL 区分缓存，保存成功解码的源文件；小图与原图 URL 相同时只下载一次，不会用缩略图替代原图。默认上限 **256 MiB / 1024 张**，写入时清理 30 天未使用及最久未使用的图片。原图页按 `r` 强制重新下载；刷新失败保留已有缓存，普通重开仍可使用。缓存目录不可写时继续正常加载图片。
+
+缓存位置：Linux 为 `$XDG_CACHE_HOME/islander/images`（通常 `~/.cache/islander/images`），macOS 为 `~/Library/Caches/islander/images`，Windows 为 `%LOCALAPPDATA%\islander\images`。指定 `--data-dir` 时使用该目录下的 `cache/images`。缓存是按 URL 哈希命名的图片文件，不写入浏览历史 JSON；删除缓存目录即可清空，下次查看会重新下载。详见 [图片缓存规格](docs/specs/image-cache.md)。
+
 Ghostty / Kitty 配合 tmux 时，程序会识别外层终端，为当前窗格临时开启图片透传，退出时恢复原设置，不修改 `~/.tmux.conf`。tmux 内采用静默上传，避免等待无法回传的图形确认；其他兼容终端可用 `--images kitty` 指定。未知终端或透传不可用时保持附件文字提示，按 `a` 后再加载。若终端关闭了图片能力或使用嵌套 tmux，可使用 `islander --images blocks tui`。详见 [串内图片与 tmux 规格](docs/specs/inline-images-tmux.md)。
 
 ## 饼干和本地数据
@@ -329,20 +333,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.7
+make release VERSION=v0.0.8
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.7 --arch aarch64
+python3 scripts/package.py --version v0.0.8 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.7 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.7 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.8 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.8 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

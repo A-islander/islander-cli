@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/A-islander/islander-cli/internal/forum"
 	"github.com/A-islander/islander-cli/internal/local"
+	"github.com/A-islander/islander-cli/internal/media"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -41,6 +43,8 @@ func TestSiteSwitchIsolatesIdentityCachesAndResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newModel()
+	cache := media.NewImageCache(filepath.Join(dir, "cache", "images"))
+	m.imageCache = cache
 	m.opts = Options{Site: "islander", ForumURL: "https://custom.example/", UserURL: "https://user.example/", DataDir: dir, Backend: "file"}
 	m.store = is
 	if err := m.setIdentity(""); err != nil {
@@ -54,6 +58,9 @@ func TestSiteSwitchIsolatesIdentityCachesAndResults(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	cmd := m.switchSite("x")
+	if m.imageCache != cache {
+		t.Fatal("site switch discarded shared URL image cache")
+	}
 	if cmd == nil || ctx.Err() == nil || m.requestID <= 9 || len(m.raw) != 0 || len(m.inlineQuotes) != 0 || len(m.offsets) != 0 || m.identity.ID != 0 || m.identity.Name != "X" {
 		t.Fatal("site switch retained old identity, caches or request")
 	}

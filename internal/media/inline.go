@@ -30,6 +30,13 @@ func loadImage(ctx context.Context, u string, maxWidth, maxHeight int) (image.Im
 	if err != nil {
 		return nil, err
 	}
+	return decodeImage(ctx, b, maxWidth, maxHeight)
+}
+
+func decodeImage(ctx context.Context, b []byte, maxWidth, maxHeight int) (image.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(b))
 	if err != nil {
 		return nil, errors.New("此附件不是支持的图片；按 o 外部打开，或 s 下载")
