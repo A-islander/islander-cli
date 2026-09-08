@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.8**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.9**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.8
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.9
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.8-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.8-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.8-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.8-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.8-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.8-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.9-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.9-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.9-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.9-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.9-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.9-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.8-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.9-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.8-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.8-linux-x86_64.AppImage
-./islander-v0.0.8-linux-x86_64.AppImage
-./islander-v0.0.8-linux-x86_64.AppImage --version
-./islander-v0.0.8-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.9-linux-x86_64.AppImage
+./islander-v0.0.9-linux-x86_64.AppImage
+./islander-v0.0.9-linux-x86_64.AppImage --version
+./islander-v0.0.9-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -86,7 +86,7 @@ make build
 ./bin/islander tui
 ```
 
-直接运行 `islander` 显示 CLI 帮助；`islander tui` 打开交互界面，默认连接正式论坛，以访客身份浏览；选择饼干并确认后才能发布。`islander <命令> --help` 查看该命令的参数，例如 `islander reply create --help`。
+直接运行 `islander` 显示 CLI 帮助；`islander tui` 打开交互界面，首次默认加载 X 岛时间线，之后沿用上次访问的岛，以访客身份浏览；选择饼干并确认后才能发布。`islander <命令> --help` 查看该命令的参数，例如 `islander reply create --help`。
 
 **想先练习发帖、回复、引用、附件和删除，可以启动独立的本地试用岛：**
 
@@ -109,7 +109,7 @@ islander --site bog tui
 
 进入首页时固定加载当前岛时间线第 1 页，选中第一条并从串第 1 页展示，不再自动返回上次的板块或串。之后手动选串时，右栏直接请求串的第一页（有阅读记录则读取上次页码），显示完整正文与本页全部回复，不再裁成摘要或限制五条。快速移动时取消旧请求；`Enter` / `Tab` 切到右栏阅读，已加载的页面直接复用。已有阅读记录会在右栏加载时恢复；`l` / `→` / `Enter` 进入、`h` / `←` 返回仅切换焦点，保留已加载页面和滚动位置。长串按页加载，可自动翻页或按 `P` 跳页。
 
-TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`P` 按页码跳转，边界处继续浏览可自动加载相邻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛，启动时回到该岛时间线首页；历史和收藏仍可手动续读。首次启动及普通 CLI 默认仍为岛民岛。
+TUI 按 **`g` 切换站点**，按 `b` 选板块；`[` / `]` 翻页，`P` 按页码跳转，边界处继续浏览可自动加载相邻页，`v` 原位展开引用，`a` 查看附件。各站点的饼干、草稿、收藏和阅读位置分开保存。TUI 记住上次访问的岛，启动时回到该岛时间线首页；历史和收藏仍可手动续读。首次启动默认 X 岛；已有站点偏好继续沿用。普通 CLI 默认仍为岛民岛。
 
 CLI 使用同一个 `--site` 参数，输出保留原有 `schemaVersion` / `data`，另附 `site` 来源字段：
 
@@ -333,20 +333,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.8
+make release VERSION=v0.0.9
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.8 --arch aarch64
+python3 scripts/package.py --version v0.0.9 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.8 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.8 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.9 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.9 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

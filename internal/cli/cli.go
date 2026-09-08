@@ -132,7 +132,7 @@ func (a *app) root() *cobra.Command {
 		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo, StateWarning: a.stateWarning})
 	}
 	root.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
-	tc := &cobra.Command{Use: "tui", Short: "交互浏览论坛", Args: cobra.NoArgs, RunE: run}
+	tc := &cobra.Command{Use: "tui", Short: "交互浏览论坛；首次默认 X 岛，之后沿用上次站点", Args: cobra.NoArgs, RunE: run}
 	tc.Flags().BoolVar(&a.demo, "demo", false, "离线浏览体验")
 	root.AddCommand(tc)
 	hidden := &cobra.Command{Use: "_image URL MODE", Hidden: true, Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, args []string) error { return media.Viewer(args[0], args[1]) }}

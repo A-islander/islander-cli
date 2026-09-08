@@ -16,13 +16,17 @@ func TestRememberedSiteOnlyAffectsUnqualifiedTUI(t *testing.T) {
 	for _, test := range []struct {
 		args      []string
 		site, url string
+		firstRun  bool
 	}{
-		{[]string{"tui"}, "bog", "https://custom-bog.test/"},
-		{[]string{"--site", "x", "tui"}, "x", "https://api.nmb.best/api/"},
-		{[]string{"tui", "--site", "islander"}, "islander", forum.ForumURL},
-		{[]string{"tui", "--forum-url", "https://custom-islander.test/"}, "islander", "https://custom-islander.test/"},
-		{[]string{"tui", "--demo"}, "islander", forum.ForumURL},
-		{[]string{"site", "info"}, "islander", forum.ForumURL},
+		{[]string{"tui"}, "bog", "https://custom-bog.test/", false},
+		{[]string{"--site", "x", "tui"}, "x", "https://api.nmb.best/api/", false},
+		{[]string{"tui", "--site", "islander"}, "islander", forum.ForumURL, false},
+		{[]string{"tui", "--forum-url", "https://custom-islander.test/"}, "islander", "https://custom-islander.test/", false},
+		{[]string{"tui", "--demo"}, "islander", forum.ForumURL, false},
+		{[]string{"site", "info"}, "islander", forum.ForumURL, false},
+		{[]string{"tui"}, "x", "https://api.nmb.best/api/", true},
+		{[]string{"tui", "--site", "islander"}, "islander", forum.ForumURL, true},
+		{[]string{"site", "info"}, "islander", forum.ForumURL, true},
 	} {
 		t.Run(test.args[0]+test.site, func(t *testing.T) {
 			a := &app{}
@@ -38,7 +42,11 @@ func TestRememberedSiteOnlyAffectsUnqualifiedTUI(t *testing.T) {
 				}
 			}
 			stub(root)
-			root.SetArgs(append([]string{"--data-dir", dir}, test.args...))
+			dataDir := dir
+			if test.firstRun {
+				dataDir = t.TempDir()
+			}
+			root.SetArgs(append([]string{"--data-dir", dataDir}, test.args...))
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
