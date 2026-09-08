@@ -188,7 +188,7 @@ func TestInlineImagesQuotesAndOff(t *testing.T) {
 	m.opts.Images = "off"
 	m.reconcileInlineImages()
 	if len(m.imageSlots) != 0 || len(m.inlineImages.entries) != 0 || !strings.Contains(m.reader.View(), "附件") {
-		t.Fatal("off must preserve attachment actions without previews")
+		t.Fatal("off must preserve attachment actions without selectedThreads")
 	}
 }
 

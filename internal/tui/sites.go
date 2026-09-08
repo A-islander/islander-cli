@@ -85,13 +85,15 @@ func (m *model) switchSite(id string) tea.Cmd {
 	next.refilter()
 	next.requestID = m.requestID + 1
 	next.fullscreen = m.fullscreen
+	next.chatStyle = m.chatStyle
+	next.agentSeed = m.agentSeed
 	next.resize(m.width, m.height)
 	if err = next.setIdentity(""); err != nil {
 		m.notice = err.Error()
 		return nil
 	}
-	if m.previewCancel != nil {
-		m.previewCancel()
+	if m.selectionCancel != nil {
+		m.selectionCancel()
 	}
 	if m.cancel != nil {
 		m.cancel()

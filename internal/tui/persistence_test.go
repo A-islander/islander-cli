@@ -261,12 +261,12 @@ func TestReopenLongThreadFromListAndFavorites(t *testing.T) {
 			if m.reading {
 				t.Fatal("did not return to list")
 			}
-			// A refreshed preview is page one; this must not replace saved page 42.
-			m.pages[100] = forum.Page{Page: 1}
+			// A cached first page must not replace the retained page 42.
+			m.selectedThreads = map[int]selectionResult{100: {Page: forum.Page{Page: 1}}}
 			c.reads = nil
 			next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-			m = drainMain(t, next.(model), cmd)
-			if n := m.navigation(); n.ReadPage != 42 || n.AnchorID != 111 || n.AnchorFraction <= 0 || fmt.Sprint(c.reads) != "[42]" {
+			m = applyCommand(next.(model), cmd)
+			if n := m.navigation(); n.ReadPage != 42 || n.AnchorID != 111 || n.AnchorFraction <= 0 || len(c.reads) != 0 {
 				t.Fatalf("list reopening lost position or scanned thread: %+v %v", n, c.reads)
 			}
 			m = press(m, "F")

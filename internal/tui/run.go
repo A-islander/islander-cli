@@ -90,6 +90,8 @@ func (m *model) setIdentity(alias string) error {
 	if err != nil {
 		return err
 	}
+	m.loadedThreadID = 0
+	m.selectedThreads = nil
 	m.identity, m.client = who, client
 	m.loadPersistence()
 	return nil

@@ -129,3 +129,45 @@ func TestLongReaderResizeKeepsScrollInsteadOfSkipping(t *testing.T) {
 		t.Fatal("narrowing window lost long quote scroll")
 	}
 }
+
+func TestReaderMovesSelectionBeforeScrolling(t *testing.T) {
+	m := newModel()
+	m.reading = true
+	m.current().title = ""
+	m.current().posts = []post{
+		{id: 100, body: "主楼"}, {id: 101, body: "第一条"},
+		{id: 102, body: "第二条"}, {id: 103, body: "第三条"},
+		{id: 104, body: "第四条"}, {id: 105, body: strings.Repeat("长回复正文\n", 40)},
+	}
+	m.resize(120, 28)
+	m.reader.GotoTop()
+	m = press(m, "j")
+	if m.activePost != 1 || m.reader.YOffset() != 0 {
+		t.Fatal("selecting a visible reply scrolled it to the top")
+	}
+	m = press(m, "k")
+	if m.activePost != 0 || m.reader.YOffset() != 0 {
+		t.Fatal("selecting the visible previous post moved the viewport")
+	}
+	for m.activePost < 3 {
+		m = press(m, "j")
+	}
+	if m.reader.YOffset() != 0 {
+		t.Fatal("viewport moved before the cursor reached its bottom")
+	}
+	m = press(m, "j")
+	item := selectedReaderItem(t, m)
+	if m.activePost != 4 || item.line < m.reader.YOffset() || item.end != m.reader.YOffset()+m.reader.Height() {
+		t.Fatal("offscreen reply was not fully revealed with the smallest scroll")
+	}
+	m = press(m, "j")
+	item = selectedReaderItem(t, m)
+	if m.activePost != 5 || m.reader.YOffset() != item.line {
+		t.Fatal("long reply did not start at its header")
+	}
+	before := m.reader.YOffset()
+	m = press(m, "j")
+	if m.activePost != 5 || m.reader.YOffset() != before+1 {
+		t.Fatal("long reply was skipped instead of scrolling one line")
+	}
+}

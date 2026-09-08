@@ -134,6 +134,7 @@ func (m *model) applyPagination(r paginationResult) {
 				root = *r.page.Root
 			}
 			m.offsets[r.rootID] = 0
+			delete(m.readerSelections, r.rootID)
 			m.applyThread(threadResult{Root: root, Page: r.page})
 			if r.latest {
 				m.movePost(len(m.current().posts))
