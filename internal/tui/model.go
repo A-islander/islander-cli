@@ -13,6 +13,7 @@ import (
 	"context"
 	"github.com/A-islander/islander-cli/internal/forum"
 	"github.com/A-islander/islander-cli/internal/local"
+	"github.com/A-islander/islander-cli/internal/media"
 )
 
 type model struct {
@@ -24,6 +25,7 @@ type model struct {
 	loadedThreadID                                    int
 	homeThread                                        int
 	imageTerminal                                     imageTerminal
+	imageCache                                        *media.ImageCache
 	imageZoom                                         int
 	inlineImages                                      inlineImageState
 	imageSlots                                        []inlineImageSlot

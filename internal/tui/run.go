@@ -27,6 +27,9 @@ func Run(o Options) error {
 	m.opts = o
 	m.store = o.Store
 	m.stateError = o.StateWarning
+	if directory, err := media.ImageCacheDir(o.DataDir); err == nil {
+		m.imageCache = media.NewImageCache(directory)
+	}
 	if !o.Demo {
 		m.boardNames = []string{"全部"}
 		m.threads = nil
