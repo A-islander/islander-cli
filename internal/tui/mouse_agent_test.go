@@ -20,7 +20,36 @@ func clickAt(m model, x, y int, button tea.MouseButton) (model, tea.Cmd) {
 	return n.(model), c
 }
 
-func TestMouseSelectMixedCardsAndDoubleClick(t *testing.T) {
+func TestBracketBoardNavigation(t *testing.T) {
+	for _, agent := range []bool{false, true} {
+		m, _ := persistenceModel(t, t.TempDir(), "x")
+		m.chatStyle = agent
+		m.boardNames = []string{"全部", "技术", "日常"}
+		m.apiBoards = []forum.Board{{ID: 10, Name: "技术"}, {ID: 20, Name: "日常"}}
+		m.reading, m.filter, m.page = true, "旧筛选", 3
+		for _, step := range []struct {
+			key   rune
+			board int
+		}{{']', 1}, {']', 2}, {']', 2}, {'[', 1}, {'[', 0}, {'[', 0}} {
+			m.busy = false
+			m, _ = updateKey(m, step.key, tea.ModCtrl)
+			if m.board != step.board || m.reading || m.filter != "" || m.chatStyle != agent {
+				t.Fatal("board shortcut did not preserve layout and reset navigation")
+			}
+			if (m.board == 0) != (m.kind == "timeline") {
+				t.Fatal("board shortcut selected the wrong list type")
+			}
+		}
+		m.busy = false
+		m.modal = "menu"
+		m, _ = updateKey(m, ']', tea.ModCtrl)
+		if m.board != 0 || m.modal != "menu" {
+			t.Fatal("board shortcut escaped a modal")
+		}
+	}
+}
+
+func TestMouseSelectMixedCardsAndTitleOpen(t *testing.T) {
 	m := newModel()
 	// Use real card text to derive pointer coordinates, including the three-row
 	// untitled card before the four-row titled one.
@@ -38,13 +67,60 @@ func TestMouseSelectMixedCardsAndDoubleClick(t *testing.T) {
 	if y < 0 {
 		t.Fatal("target card missing")
 	}
-	m, _ = clickAt(m, 6, y, tea.MouseLeft)
+	m, _ = clickAt(m, 6, y+1, tea.MouseLeft)
 	if m.selected != 1 || m.reading {
 		t.Fatal("single click should select the card")
 	}
 	m, _ = clickAt(m, 6, y, tea.MouseLeft)
 	if !m.reading || m.current().id != 200 || !m.hasLoadedThread() || m.busy {
-		t.Fatal("double click should enter the cached thread")
+		t.Fatal("title click should enter the cached thread")
+	}
+}
+
+func TestAgentListModeAndCardClicks(t *testing.T) {
+	for _, size := range [][2]int{{120, 36}, {80, 24}} {
+		for _, target := range []struct {
+			name    string
+			id, row int
+		}{
+			{"title", 100, 0}, {"read annotation", 100, 1}, {"excerpt", 100, 2},
+			{"untitled", 200, 4}, {"untitled annotation", 200, 5},
+		} {
+			t.Run(fmt.Sprintf("%v/%s", size, target.name), func(t *testing.T) {
+				m := imagePreviewFixture("x", "off")
+				m.selectedThreads[200] = selectionResult{Page: forum.Page{Page: 1, List: []forum.Post{m.raw[200]}}}
+				m.resize(size[0], size[1])
+				for i := 0; i < 3; i++ {
+					m, _ = updateKey(m, tea.KeyF6, 0)
+					if m.reading || m.selected != 0 || m.busy {
+						t.Fatal("layout toggle entered reading or changed selected thread")
+					}
+				}
+				lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+				y := -1
+				for i, line := range lines {
+					if strings.Contains(line, "图片预览") {
+						y = i
+						break
+					}
+				}
+				if y < 0 {
+					t.Fatal("agent list missing")
+				}
+				m, _ = clickAt(m, 6, y+3, tea.MouseLeft)
+				if m.reading {
+					t.Fatal("card gap opened a thread")
+				}
+				m, _ = clickAt(m, 6, y+target.row, tea.MouseLeft)
+				if !m.reading || m.current().id != target.id || !m.hasLoadedThread() || m.busy {
+					t.Fatal("agent card click did not open cached target")
+				}
+				m, _ = updateKey(m, 'h', 0)
+				if m.reading || !strings.Contains(ansi.Strip(m.View().Content), "Read local context") {
+					t.Fatal("return did not restore agent list")
+				}
+			})
+		}
 	}
 }
 
@@ -66,6 +142,46 @@ func TestMouseReaderSelectionMenuAndWheelFollowPointer(t *testing.T) {
 	m = n.(model)
 	if m.reading || m.selected != 1 {
 		t.Fatal("wheel over list did not return focus and select next card")
+	}
+}
+
+func TestAgentBackButtonPreservesNavigation(t *testing.T) {
+	for _, size := range [][2]int{{120, 36}, {80, 24}, {44, 16}} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			m := imagePreviewFixture("x", "off")
+			m.toggleChatStyle()
+			m.resize(size[0], size[1])
+			if strings.Contains(ansi.Strip(m.View().Content), "exit") {
+				t.Fatal("list should not show a back button")
+			}
+			m.focusMouseReader()
+			m.moveReaderItem(2)
+			m.reader.SetYOffset(m.readerItems[2].line)
+			selected, top, offset, key := m.selected, m.listTop, m.reader.YOffset(), m.selectedKey()
+			lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+			label := "exit"
+			index := strings.Index(lines[1], label)
+			if index < 0 || !strings.Contains(lines[1][:index], ">_ Codex") {
+				t.Fatal("back button missing to the right of Codex")
+			}
+			x := ansi.StringWidth(lines[1][:index])
+			if x != size[0]-2-ansi.StringWidth(label) {
+				t.Fatal("exit should align with the right header edge")
+			}
+			m.openPostActions()
+			m, _ = clickAt(m, x, 1, tea.MouseLeft)
+			if !m.reading || m.modal != "" {
+				t.Fatal("menu dismissal clicked through to back button")
+			}
+			m, _ = clickAt(m, x, 1, tea.MouseLeft)
+			if m.reading || m.selected != selected || m.listTop != top || strings.Contains(ansi.Strip(m.View().Content), label) {
+				t.Fatal("back button did not restore the same list position")
+			}
+			m, _ = clickAt(m, 6, m.listContentTop(), tea.MouseLeft)
+			if !m.reading || m.busy || m.reader.YOffset() != offset || m.selectedKey() != key {
+				t.Fatal("reopening lost the cached reading position")
+			}
+		})
 	}
 }
 
@@ -242,6 +358,7 @@ func TestMouseQuoteAndAttachmentHitRenderedRows(t *testing.T) {
 
 func TestAgentMouseUsesIndependentLayoutAndNeutralPalette(t *testing.T) {
 	m := imagePreviewFixture("x", "off")
+	m.focusMouseReader()
 	m, _ = updateKey(m, tea.KeyF6, 0)
 	// Former tabs and switch coordinates are now ordinary blank/header space.
 	board := m.board
@@ -276,8 +393,9 @@ func TestAgentMouseUsesIndependentLayoutAndNeutralPalette(t *testing.T) {
 	}
 	m.modal = ""
 	m, _ = updateKey(m, 'h', 0)
-	m, _ = clickAt(m, 6, m.listContentTop()+m.listItemHeight(0), tea.MouseLeft)
-	if m.selected != 1 || m.reading {
+	m.selectedThreads[200] = selectionResult{Page: forum.Page{Page: 1, List: []forum.Post{m.raw[200]}}}
+	m, _ = clickAt(m, 6, m.listContentTop()+m.listItemHeight(0)+1, tea.MouseLeft)
+	if m.selected != 1 || !m.reading || m.current().id != 200 {
 		t.Fatal("agent list click used forum coordinates")
 	}
 }
@@ -285,6 +403,7 @@ func TestAgentMouseUsesIndependentLayoutAndNeutralPalette(t *testing.T) {
 func TestAgentHidesMetadataAndKeepsSimulatedOutputStable(t *testing.T) {
 	m := imagePreviewFixture("x", "off")
 	m.agentSeed = 123
+	m.focusMouseReader()
 	m, _ = updateKey(m, tea.KeyF6, 0)
 	before := ansi.Strip(m.reader.GetContent())
 	view := ansi.Strip(m.View().Content)
@@ -340,5 +459,76 @@ func TestAgentReferenceMaskDoesNotChangeForumContent(t *testing.T) {
 	m, _ = updateKey(m, tea.KeyF6, 0)
 	if !strings.Contains(ansi.Strip(m.reader.GetContent()), "No.654321") {
 		t.Fatal("forum view lost original reference")
+	}
+}
+
+func TestMouseMenusDismissWithoutClickingThrough(t *testing.T) {
+	for _, agent := range []bool{false, true} {
+		for _, where := range []string{"right-inside", "right-outside", "title-behind", "mode-behind", "border", "padding"} {
+			t.Run(fmt.Sprintf("agent=%v/%s", agent, where), func(t *testing.T) {
+				m := imagePreviewFixture("x", "off")
+				m.focusMouseReader()
+				if agent {
+					m.toggleChatStyle()
+				}
+				m.openPostActions()
+				m.pendingMine = true
+				selected, id, generation := m.selectedKey(), m.current().id, m.requestID
+				dialog := m.dialog()
+				x, y := (m.width-lipgloss.Width(dialog))/2, (m.height-lipgloss.Height(dialog))/2
+				button := tea.MouseLeft
+				wantClose := true
+				switch where {
+				case "right-inside":
+					x += 5
+					y += 4
+					button = tea.MouseRight
+				case "right-outside":
+					x = 0
+					y = 0
+					button = tea.MouseRight
+				case "title-behind":
+					x = 6
+					y = m.listContentTop()
+				case "mode-behind":
+					x = m.modeButtonX() + 2
+					y = 0
+				case "border":
+					wantClose = false
+				case "padding":
+					x += 4
+					y += 1
+					wantClose = false
+				}
+				m, _ = clickAt(m, x, y, button)
+				if wantClose != (m.modal == "") {
+					t.Fatalf("menu close mismatch: %s", m.modal)
+				}
+				if m.current().id != id || m.selectedKey() != selected || m.requestID != generation || m.chatStyle != agent || !m.reading {
+					t.Fatal("menu click reached underlying page")
+				}
+				if wantClose && m.pendingMine {
+					t.Fatal("menu dismissal did not cancel pending action")
+				}
+			})
+		}
+	}
+}
+
+func TestMouseTitleOpensUntitledHomeWithoutCachedPage(t *testing.T) {
+	m, c := persistenceModel(t, t.TempDir(), "x")
+	m = drainMain(t, m, m.initialLoad())
+	p := m.raw[100]
+	p.Title = ""
+	m.raw[100] = p
+	m.threads[0] = m.displayThread(p)
+	m.refreshReader(false)
+	m, cmd := clickAt(m, 6, m.listContentTop(), tea.MouseLeft)
+	if cmd == nil || !m.busy {
+		t.Fatal("title did not start an uncached read")
+	}
+	m = applyCommand(m, cmd)
+	if !m.reading || m.current().id != 100 || fmt.Sprint(c.reads) != "[1]" {
+		t.Fatal("title did not open first page")
 	}
 }

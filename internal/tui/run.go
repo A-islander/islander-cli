@@ -41,9 +41,7 @@ func Run(o Options) error {
 		if err := m.setIdentity(o.Cookie); err != nil {
 			m.notice = err.Error()
 		}
-		if p, err := local.ReadPreferences(o.DataDir); err == nil {
-			m.siteConfigs = p.Sites
-		}
+		m.loadUIPreferences()
 		m.rememberSite()
 	}
 	terminal, restoreTerminal := prepareImageTerminal(o.Images)

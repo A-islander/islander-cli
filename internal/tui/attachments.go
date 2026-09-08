@@ -306,7 +306,7 @@ func (m model) attachmentDialog() string {
 		mode += fmt.Sprintf(" · %d%%", a.percent)
 	}
 	content := strong(label, teal) + "  " + ink(mode, muted) + "\n\n" + rectangle(body, w, h) + "\n\n" +
-		ink(clip("+/- 缩放 · 0 适应 · Esc 返回", w), sand) + "\n" +
+		ink(clip("滚轮 / +/- 缩放 · 0 适应 · Esc 返回", w), sand) + "\n" +
 		ink(clip("←→ 切换 · Shift+方向 移动", w), muted) + "\n" +
 		ink(clip("r 重试 · b 字符 · o 外部 · s 下载", w), muted)
 	return panel(strings.TrimRight(content, "\n"), w+6, h+9, true)

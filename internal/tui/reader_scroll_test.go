@@ -130,7 +130,7 @@ func TestLongReaderResizeKeepsScrollInsteadOfSkipping(t *testing.T) {
 	}
 }
 
-func TestReaderMovesSelectionBeforeScrolling(t *testing.T) {
+func TestReaderCentersRepliesAndReadsLongPosts(t *testing.T) {
 	m := newModel()
 	m.reading = true
 	m.current().title = ""
@@ -152,13 +152,14 @@ func TestReaderMovesSelectionBeforeScrolling(t *testing.T) {
 	for m.activePost < 3 {
 		m = press(m, "j")
 	}
-	if m.reader.YOffset() != 0 {
-		t.Fatal("viewport moved before the cursor reached its bottom")
+	item := selectedReaderItem(t, m)
+	if above, below := item.line-m.reader.YOffset(), m.reader.YOffset()+m.reader.Height()-item.end; above < 0 || below < 0 || above-below > 1 || below-above > 1 {
+		t.Fatal("ordinary reply was not centered")
 	}
 	m = press(m, "j")
-	item := selectedReaderItem(t, m)
-	if m.activePost != 4 || item.line < m.reader.YOffset() || item.end != m.reader.YOffset()+m.reader.Height() {
-		t.Fatal("offscreen reply was not fully revealed with the smallest scroll")
+	item = selectedReaderItem(t, m)
+	if m.activePost != 4 || item.line < m.reader.YOffset() || item.end > m.reader.YOffset()+m.reader.Height() {
+		t.Fatal("next reply was not fully revealed")
 	}
 	m = press(m, "j")
 	item = selectedReaderItem(t, m)

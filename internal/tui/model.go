@@ -19,8 +19,10 @@ type model struct {
 	chatStyle                                         bool
 	agentSeed                                         uint64
 	agentWorking                                      agentWorkingState
+	readerScroll                                      readerScrollState
 	lastListClick                                     listClick
 	loadedThreadID                                    int
+	homeThread                                        int
 	imageTerminal                                     imageTerminal
 	imageZoom                                         int
 	inlineImages                                      inlineImageState
@@ -228,6 +230,8 @@ func (m *model) moveSelection(delta int) {
 	previous := m.selected
 	m.selected = max(0, min(len(m.visible)-1, m.selected+delta))
 	if previous != m.selected {
+		delete(m.selectedThreads, m.homeThread)
+		m.homeThread = 0
 		m.loadedThreadID = 0
 	}
 	m.activePost = 0

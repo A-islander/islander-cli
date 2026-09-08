@@ -192,11 +192,15 @@ func (m model) readerAt(y int) (readerItem, bool) {
 	return readerItem{}, false
 }
 func (m *model) mouseMenu(click tea.MouseClickMsg) tea.Cmd {
+	dialog := m.dialog()
+	x, y := (m.width-lipgloss.Width(dialog))/2, (m.height-lipgloss.Height(dialog))/2
+	if click.Button == tea.MouseRight || click.X < x || click.X >= x+lipgloss.Width(dialog) || click.Y < y || click.Y >= y+lipgloss.Height(dialog) {
+		m.lastListClick = listClick{}
+		return m.mouseKey(tea.KeyEscape)
+	}
 	if click.Button != tea.MouseLeft {
 		return nil
 	}
-	dialog := m.dialog()
-	x, y := (m.width-lipgloss.Width(dialog))/2, (m.height-lipgloss.Height(dialog))/2
 	if click.X < x+3 || click.X >= x+lipgloss.Width(dialog)-3 || click.Y < y+1 || click.Y >= y+lipgloss.Height(dialog)-1 {
 		return nil
 	}
@@ -212,6 +216,23 @@ func (m *model) mouseMenu(click tea.MouseClickMsg) tea.Cmd {
 }
 func (m *model) mouseWheel(w tea.MouseWheelMsg) tea.Cmd {
 	m.lastListClick = listClick{}
+	if m.modal == "attachment" {
+		dialog := m.dialog()
+		x, y := (m.width-lipgloss.Width(dialog))/2, (m.height-lipgloss.Height(dialog))/2
+		if w.X >= x && w.X < x+lipgloss.Width(dialog) && w.Y >= y && w.Y < y+lipgloss.Height(dialog) {
+			key := rune(0)
+			if w.Button == tea.MouseWheelUp {
+				key = '+'
+			} else if w.Button == tea.MouseWheelDown {
+				key = '-'
+			}
+			if key != 0 {
+				cmd, _ := m.attachmentUpdate(tea.KeyPressMsg{Code: key, Text: string(key)})
+				return cmd
+			}
+		}
+		return nil
+	}
 	if m.modal == "publish" {
 		m.popup, _ = m.popup.Update(w)
 		return nil
@@ -239,6 +260,15 @@ func (m *model) mouseWheel(w tea.MouseWheelMsg) tea.Cmd {
 	} else if !m.focusMouseReader() {
 		return nil
 	}
+	if pane == readerMousePane {
+		if w.Button == tea.MouseWheelDown {
+			return m.mouseKey('j')
+		}
+		if w.Button == tea.MouseWheelUp {
+			return m.mouseKey('k')
+		}
+		return nil
+	}
 	if cmd, handled := m.paginationInput(w); handled {
 		return cmd
 	}
@@ -259,17 +289,22 @@ func (m *model) mouseClick(c tea.MouseClickMsg) tea.Cmd {
 	if c.Button != tea.MouseLeft && c.Button != tea.MouseRight {
 		return nil
 	}
+	if m.modal == "menu" {
+		return m.mouseMenu(c)
+	}
 	if !m.chatStyle && c.Y == 0 && c.Button == tea.MouseLeft && c.X >= m.modeButtonX() && c.X < m.width-1 {
 		m.toggleChatStyle()
 		return nil
-	}
-	if m.modal == "menu" {
-		return m.mouseMenu(c)
 	}
 	if cmd, handled := m.clickAgentReply(c); handled {
 		return cmd
 	}
 	if m.modal != "" {
+		return nil
+	}
+	if c.Button == tea.MouseLeft && m.agentBackButtonAt(c.X, c.Y) {
+		m.lastListClick = listClick{}
+		m.focusMouseList()
 		return nil
 	}
 	if !m.chatStyle && c.Y == tabsY && c.Button == tea.MouseLeft {
@@ -313,6 +348,11 @@ func (m *model) mouseClick(c tea.MouseClickMsg) tea.Cmd {
 		if index < 0 {
 			return nil
 		}
+		titleY := m.listContentTop()
+		for i := m.listTop; i < index; i++ {
+			titleY += m.listItemHeight(i)
+		}
+		titleClick := c.Y == titleY && c.X >= 4 && c.X < m.listWidth()-2
 		m.focusMouseList()
 		now := time.Now()
 		id := m.threads[m.visible[index]].id
@@ -322,7 +362,7 @@ func (m *model) mouseClick(c tea.MouseClickMsg) tea.Cmd {
 			m.moveSelection(index - m.selected)
 		}
 		m.lastListClick = listClick{site: m.opts.Site, identity: m.identity.Alias, id: id, x: c.X, y: c.Y, generation: m.requestID, at: now}
-		if double {
+		if m.chatStyle || titleClick || double {
 			m.lastListClick = listClick{}
 			return m.mouseKey(tea.KeyEnter)
 		}

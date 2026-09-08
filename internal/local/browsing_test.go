@@ -272,3 +272,38 @@ func TestFavoritesAreScopedAndDoNotCreateHistory(t *testing.T) {
 		t.Fatal("toggle did not remove favorite")
 	}
 }
+
+func TestAppearancePreferenceMergesSitesAndPreservesInvalidFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := RememberAgentSimulation(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, site := range forum.Sites() {
+		if err := RememberSite(dir, site); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := ReadPreferences(dir)
+	if err != nil || !p.AgentSimulation || len(p.Sites) != 3 {
+		t.Fatal("site save discarded appearance")
+	}
+	if err := RememberAgentSimulation(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	p, err = ReadPreferences(dir)
+	if err != nil || p.AgentSimulation || len(p.Sites) != 3 || p.LastSite.ID != "bog" {
+		t.Fatal("appearance save discarded site preferences")
+	}
+	path := filepath.Join(dir, "preferences.json")
+	broken := []byte(`{"version":99}`)
+	if err := os.WriteFile(path, broken, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RememberAgentSimulation(dir, true); err == nil {
+		t.Fatal("overwrote unsupported preferences")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != string(broken) {
+		t.Fatal("invalid preferences were changed")
+	}
+}

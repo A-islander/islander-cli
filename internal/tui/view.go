@@ -456,6 +456,9 @@ func (m model) dialog() string {
 }
 
 func (m model) View() tea.View {
+	// Animate a copy of the viewport; navigation and persistence retain the
+	// final target and never observe intermediate animation frames.
+	m.reader.SetYOffset(m.readerVisualOffset())
 	name, wordmark, slogan := m.siteBranding()
 	if m.width < 44 || m.height < 16 {
 		return screenView(m.width, m.height, lipgloss.NewLayer(rectangle(name+"\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
