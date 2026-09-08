@@ -30,7 +30,7 @@ func (m model) updateWithSelection(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectionCancel = cancel
 			c := m.client
 			var resume *local.Navigation
-			if m.store != nil {
+			if m.store != nil && m.homeThread != v.Target {
 				if browsing, err := m.store.Browsing(m.identity.Alias); err == nil {
 					if saved, ok := browsing.ReadingPosition(v.Target); ok {
 						n := m.navigation()
@@ -95,7 +95,7 @@ func (m *model) prepareSelection() tea.Cmd {
 		}
 	}
 	t := m.current()
-	if m.opts.Demo || m.client == nil || m.reading || m.hasLoadedThread() || m.busy || m.modal != "" || !m.split() || t == nil {
+	if m.opts.Demo || m.client == nil || m.reading || m.hasLoadedThread() || m.busy || m.modal != "" || (!m.split() && !m.chatStyle) || t == nil {
 		if m.selectionCancel != nil {
 			m.selectionCancel()
 			m.selectionCancel = nil

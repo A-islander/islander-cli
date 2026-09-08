@@ -31,6 +31,10 @@ type menuItem struct{ Label, Action, Value string }
 type startMsg struct{}
 
 func (m *model) initialLoad() tea.Cmd {
+	if m.pendingRestore == nil {
+		m.kind, m.board, m.page, m.filter, m.reading, m.newest = "timeline", 0, 1, "", false, false
+	}
+	m.homeThread = 0
 	return m.launch("initial", func(ctx context.Context, c forum.Backend) (any, error) {
 		b, e := c.Boards(ctx)
 		if e != nil {
@@ -133,6 +137,7 @@ func (m *model) displayThread(p forum.Post) thread {
 	return thread{p.ID, board, title, excerpt, []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
+	m.homeThread = 0
 	m.loadedThreadID = 0
 	m.listWindow = newPageWindow(p)
 	m.threadWindow = pageWindow{}
@@ -207,6 +212,23 @@ func (m *model) loadList(page int) tea.Cmd {
 	m.reading = false
 	return m.launch("list", func(ctx context.Context, c forum.Backend) (any, error) { return c.List(ctx, kind, id, page) })
 }
+
+// Homepage content is already identified by the timeline; request its first
+// page directly, without looking up the previous session or refetching the root.
+func (m *model) loadHomeThread(id int) tea.Cmd {
+	root, ok := m.raw[id]
+	if !ok {
+		return m.loadThread(id, 1, 0)
+	}
+	return m.launch("thread", func(ctx context.Context, c forum.Backend) (any, error) {
+		page, err := c.List(ctx, "thread", id, 1)
+		if page.Root != nil {
+			root = *page.Root
+		}
+		return threadResult{Root: root, Page: page}, err
+	})
+}
+
 func (m *model) loadThread(id, page, target int) tea.Cmd {
 	if t := m.current(); m.reading && t != nil && t.id == id && m.pages[t.id].Page == page {
 		m.savePosition()
@@ -237,6 +259,7 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 	})
 }
 func (m *model) applyThread(r threadResult) {
+	m.homeThread = 0
 	m.loadedThreadID = r.Root.ID
 	m.threadWindow = newPageWindow(r.Page)
 	m.stateReady = true

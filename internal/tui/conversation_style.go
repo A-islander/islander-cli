@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"github.com/A-islander/islander-cli/internal/local"
 	"hash/fnv"
 	"image/color"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -30,9 +32,6 @@ func (m *model) toggleChatStyle() {
 	if (m.modal != "" && m.modal != "compose") || m.busy {
 		return
 	}
-	if !m.chatStyle && !m.reading {
-		m.focusMouseReader()
-	}
 	key, delta := "", 0
 	for _, item := range m.readerItems {
 		if item.line <= m.reader.YOffset() {
@@ -40,6 +39,7 @@ func (m *model) toggleChatStyle() {
 		}
 	}
 	m.chatStyle = !m.chatStyle
+	m.rememberAppearance()
 	m.lastListClick = listClick{}
 	m.resize(m.width, m.height)
 	for _, item := range m.readerItems {
@@ -92,6 +92,15 @@ func (m *model) resizeEditor() {
 // or represent an actual model session.
 const agentSession = "gpt-6-astra high · ~/Develope/islander · Main [default]"
 const agentContentTop = 6
+
+func (m model) agentBackButton() string { return strong("exit", foam) }
+
+func (m model) agentBackButtonX() int { return m.width - 2 - ansi.StringWidth(m.agentBackButton()) }
+
+func (m model) agentBackButtonAt(x, y int) bool {
+	return m.chatStyle && m.reading && y == 1 && x >= m.agentBackButtonX() &&
+		x < m.agentBackButtonX()+ansi.StringWidth(m.agentBackButton())
+}
 
 func (m model) readerTop() int {
 	if m.chatStyle {
@@ -168,6 +177,9 @@ func (m model) agentView() tea.View {
 		lipgloss.NewLayer(ink(clip(activity, w), muted)).X(2).Y(m.height - 7),
 		lipgloss.NewLayer(m.agentReplyBox()).X(2).Y(m.agentReplyTop()),
 		lipgloss.NewLayer(ink(clip(agentSession, w), muted)).X(2).Y(m.height - 1),
+	}
+	if m.reading {
+		layers = append(layers, lipgloss.NewLayer(m.agentBackButton()).X(m.agentBackButtonX()).Y(1))
 	}
 	if m.modal != "" && !m.inlineAgentCompose() {
 		dialog := m.dialog()
@@ -253,4 +265,34 @@ func (m model) agentToolLines(key string, primary bool, width int) []string {
     e3644f991b47e803362c3471330978dd09798171b4e353a761ece38b46d37a2e  bin/islander-dev`,
 	}
 	return agentRenderToolBlock(samples[(choice/3)%uint64(len(samples))], width)
+}
+
+func (m model) preferencesRoot() string {
+	if m.opts.DataDir != "" {
+		return m.opts.DataDir
+	}
+	if m.store != nil {
+		return filepath.Dir(m.store.Dir)
+	}
+	return ""
+}
+func (m *model) loadUIPreferences() {
+	if m.opts.Demo {
+		return
+	}
+	p, err := local.ReadPreferences(m.preferencesRoot())
+	if err != nil {
+		m.opts.StateWarning = err.Error()
+		return
+	}
+	m.siteConfigs, m.chatStyle = p.Sites, p.AgentSimulation
+	m.resize(m.width, m.height)
+}
+func (m *model) rememberAppearance() {
+	if m.opts.Demo || m.store == nil {
+		return
+	}
+	if err := local.RememberAgentSimulation(m.preferencesRoot(), m.chatStyle); err != nil {
+		m.opts.StateWarning = "界面偏好保存失败：" + err.Error()
+	}
 }

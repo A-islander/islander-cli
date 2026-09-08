@@ -456,9 +456,22 @@ func (m *model) inlineImagesUpdate(msg tea.Msg) (tea.Cmd, bool) {
 // Run reconciliation after navigation and async results, so downloads never
 // originate in View and obsolete results cannot revive another thread's images.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(readerScrollTick); ok {
+		cmd := m.advanceReaderScroll(tick)
+		return m, cmd
+	}
 	if tick, ok := msg.(agentWorkingTick); ok {
 		cmd := m.advanceAgentWorking(tick)
 		return m, cmd
+	}
+	from, animate := m.readerVisualOffset(), m.readerFloorInput(msg)
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		// Pointer hit testing must use the frame the user actually clicked.
+		m.reader.SetYOffset(from)
+		m.readerScroll = readerScrollState{}
+	case tea.KeyPressMsg, tea.MouseWheelMsg, tea.WindowSizeMsg:
+		m.readerScroll = readerScrollState{}
 	}
 	cmd, handled := m.inlineImagesUpdate(msg)
 	if !handled {
@@ -470,7 +483,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshReader(false)
 		m.ensureListVisible()
 	}
-	more := tea.Batch(m.reconcileInlineImages(), m.syncAgentWorking(time.Now()))
+	images := m.reconcileInlineImages()
+	var scroll tea.Cmd
+	if animate {
+		scroll = m.startReaderScroll(from)
+	} else if !m.readerScrollValid() {
+		m.readerScroll = readerScrollState{}
+	}
+	more := tea.Batch(images, scroll, m.syncAgentWorking(time.Now()))
 	if cmd == nil {
 		return m, more
 	}

@@ -81,7 +81,7 @@ func drainMain(t *testing.T, m model, cmd tea.Cmd) model {
 	return m
 }
 
-func TestRestartRestoresPerSiteBoardAndReadingAnchor(t *testing.T) {
+func TestRestartStartsTimelineAndHistoryStillResumes(t *testing.T) {
 	for _, site := range []string{"islander", "x", "bog"} {
 		t.Run(site, func(t *testing.T) {
 			dir := t.TempDir()
@@ -103,11 +103,17 @@ func TestRestartRestoresPerSiteBoardAndReadingAnchor(t *testing.T) {
 			next, backend := persistenceModel(t, dir, site)
 			next = drainMain(t, next, next.initialLoad())
 			got := next.navigation()
+			if next.reading || next.kind != "timeline" || next.board != 0 || got.Page != 1 || got.SelectedID != 100 || len(backend.reads) != 0 {
+				t.Fatalf("restart resumed old session: %+v reads=%v", got, backend.reads)
+			}
+			next.openHistory("100")
+			next = drainMain(t, next, next.selectMenu())
+			got = next.navigation()
 			if !next.reading || next.kind != "board" || next.board != 1 || got.ReadPage != 3 || got.AnchorID != 111 || got.Page != 2 {
-				t.Fatalf("restore lost navigation: %+v %s", got, next.notice)
+				t.Fatalf("explicit history lost navigation: %+v %s", got, next.notice)
 			}
 			if len(backend.reads) != 1 || backend.reads[0] != 3 {
-				t.Fatalf("restore unnecessarily scanned thread: %v", backend.reads)
+				t.Fatalf("history scanned thread: %v", backend.reads)
 			}
 			if next.pendingRestore != nil {
 				t.Fatal("restore never completed")
@@ -138,6 +144,7 @@ func TestRestoreOnlyChecksNeighborPagesForMissingAnchor(t *testing.T) {
 	}
 	m.loadPersistence()
 	m = drainMain(t, m, m.initialLoad())
+	m = drainMain(t, m, m.startRestore(n))
 	if fmt.Sprint(c.reads) != "[5 4 6]" || !strings.Contains(m.notice, "原楼层不在附近页") {
 		t.Fatalf("unbounded or silent restore: %v %s", c.reads, m.notice)
 	}
@@ -302,5 +309,78 @@ func TestReopenLongThreadFromListAndFavorites(t *testing.T) {
 				t.Fatal("unfavoriting removed history")
 			}
 		})
+	}
+}
+
+func TestHomepageLoadsFirstThreadPageInBothLayouts(t *testing.T) {
+	for _, site := range []string{"islander", "x", "bog"} {
+		for _, agent := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/agent=%v", site, agent), func(t *testing.T) {
+				dir := t.TempDir()
+				m, c := persistenceModel(t, dir, site)
+				for _, id := range []int{100, 999} {
+					n := local.Navigation{Kind: "board", BoardID: 10, Page: 7, SelectedID: id, ThreadID: id, ReadPage: 42, AnchorID: 111, Filter: "旧筛选", Newest: true}
+					entry := &local.HistoryEntry{Navigation: n, Title: fmt.Sprint(id), VisitedAt: time.Now().UnixNano()}
+					if err := m.store.SaveBrowsing("", n, entry); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := local.RememberAgentSimulation(dir, agent); err != nil {
+					t.Fatal(err)
+				}
+				m.loadPersistence()
+				m.loadUIPreferences()
+				m.fullscreen = false
+				m.resize(120, 36)
+				m = drainMain(t, m, m.initialLoad())
+				if m.chatStyle != agent || m.kind != "timeline" || m.board != 0 || m.page != 1 || m.selected != 0 || m.current().id != 100 || m.filter != "" || m.newest {
+					t.Fatal("homepage restored old list instead of first timeline item")
+				}
+				if m.reading {
+					t.Fatal("homepage entered reading before user selected a thread")
+				}
+				tick := m.prepareSelection()
+				if tick == nil {
+					t.Fatal("homepage did not schedule first thread")
+				}
+				next, fetch := m.Update(tick())
+				m = applyCommand(next.(model), fetch)
+				if m.reading || m.selectedThreads[100].Resume != nil || m.selectedThreads[100].Page.Page != 1 {
+					t.Fatal("homepage prefetch changed focus or resumed old page")
+				}
+				m, _ = clickAt(m, 6, m.listContentTop(), tea.MouseLeft)
+				if !m.reading || m.current().id != 100 || m.pages[100].Page != 1 || m.busy {
+					t.Fatal("homepage click did not enter cached first page")
+				}
+				if fmt.Sprint(c.reads) != "[1]" {
+					t.Fatalf("homepage made unnecessary thread reads: %v", c.reads)
+				}
+				saved, err := m.store.Browsing("")
+				if err != nil || len(saved.History) != 2 {
+					t.Fatal("homepage deleted saved history")
+				}
+			})
+		}
+	}
+}
+
+func TestAgentAppearancePersistsAndCanBeDisabled(t *testing.T) {
+	dir := t.TempDir()
+	m, _ := persistenceModel(t, dir, "x")
+	m.toggleChatStyle()
+	saved, err := local.ReadPreferences(dir)
+	if err != nil || !saved.AgentSimulation {
+		t.Fatal("mode toggle did not persist")
+	}
+	next, _ := persistenceModel(t, dir, "x")
+	next.loadUIPreferences()
+	if !next.chatStyle {
+		t.Fatal("restart lost Agent appearance")
+	}
+	next.toggleChatStyle()
+	last, _ := persistenceModel(t, dir, "x")
+	last.loadUIPreferences()
+	if last.chatStyle {
+		t.Fatal("forum appearance was not saved")
 	}
 }

@@ -37,10 +37,8 @@ func (m *model) loadPersistence() {
 		return
 	}
 	m.favoriteEntries = b.Favorites
-	if b.Session.Kind != "" {
-		n := b.Session
-		m.pendingRestore = &n
-	}
+	// Homepage entry starts on the timeline. Saved thread positions remain
+	// available through explicit selection, history and favorites.
 }
 
 func (m *model) rememberSite() {
@@ -420,6 +418,9 @@ func (m *model) openDraftEdits() tea.Cmd {
 func (m *model) openThread(id int) tea.Cmd {
 	if m.enterSelectedThread(id) {
 		return nil
+	}
+	if m.homeThread == id {
+		return m.loadHomeThread(id)
 	}
 	if m.store != nil {
 		b, err := m.store.Browsing(m.identity.Alias)

@@ -88,14 +88,16 @@ func (m *model) moveReaderItem(delta int) {
 	item := m.readerItems[next]
 	m.setReaderItem(item)
 	m.refreshReader(false)
-	if delta > 0 {
-		// Reveal the complete reply with the smallest scroll. For a reply
-		// taller than the viewport, start at its header and read down normally.
-		offset = max(offset, min(item.line, item.end-m.reader.Height()))
+	if item.end-item.line <= m.reader.Height() {
+		// Explicit jump-to-floor commands reserve trailing scroll space. Ignore
+		// that space when centering so the final reply stays at the bottom.
+		offset = item.line - (m.reader.Height()-(item.end-item.line))/2
+		offset = max(0, min(offset, m.readerItems[len(m.readerItems)-1].end-m.reader.Height()))
+	} else if delta > 0 {
+		offset = item.line
 	} else {
 		// Re-enter a long previous post at its bottom, then read upwards.
-		// Already visible posts keep their screen position.
-		offset = min(offset, max(item.line, item.end-m.reader.Height()))
+		offset = item.end - m.reader.Height()
 	}
 	m.reader.SetYOffset(offset)
 }

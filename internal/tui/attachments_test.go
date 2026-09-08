@@ -24,6 +24,33 @@ func attachmentModel() model {
 	return m
 }
 
+func TestAttachmentMouseWheelZoom(t *testing.T) {
+	for _, agent := range []bool{false, true} {
+		m := attachmentModel()
+		defer m.attachment.cancel()
+		m.chatStyle = agent
+		m.attachment.img = image.NewRGBA(image.Rect(0, 0, 400, 200))
+		m.attachment.loading = false
+		m.renderAttachment()
+		id, offset := m.attachment.id, m.reader.YOffset()
+		for _, wheel := range []struct {
+			button tea.MouseButton
+			zoom   int
+		}{{tea.MouseWheelUp, 1}, {tea.MouseWheelDown, 0}, {tea.MouseWheelDown, -1}} {
+			n, _ := m.Update(tea.MouseWheelMsg{X: m.width / 2, Y: m.height / 2, Button: wheel.button})
+			m = n.(model)
+			if m.attachment.zoom != wheel.zoom || m.attachment.id != id || m.attachment.loading || m.reader.YOffset() != offset {
+				t.Fatal("wheel did not zoom in place")
+			}
+		}
+		n, _ := m.Update(tea.MouseWheelMsg{X: 0, Y: 0, Button: tea.MouseWheelUp})
+		m = n.(model)
+		if m.attachment.zoom != -1 {
+			t.Fatal("wheel outside image dialog changed zoom")
+		}
+	}
+}
+
 func TestInlineAttachmentSwitchAndReturn(t *testing.T) {
 	m := attachmentModel()
 	originalOffset := m.reader.YOffset()

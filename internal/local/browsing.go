@@ -15,9 +15,10 @@ import (
 )
 
 type Preferences struct {
-	Version  int                   `json:"version"`
-	LastSite forum.Site            `json:"lastSite"`
-	Sites    map[string]forum.Site `json:"sites"`
+	AgentSimulation bool                  `json:"agentSimulation,omitempty"`
+	Version         int                   `json:"version"`
+	LastSite        forum.Site            `json:"lastSite"`
+	Sites           map[string]forum.Site `json:"sites"`
 }
 
 func DataRoot(root string) (string, error) {
@@ -99,6 +100,23 @@ func RememberSite(root string, site forum.Site) error {
 			return err
 		}
 		p.LastSite, p.Sites[s.ID] = s, s
+		return atomic(path, p)
+	})
+}
+
+// RememberAgentSimulation merges the UI choice without replacing site settings.
+func RememberAgentSimulation(root string, enabled bool) error {
+	root, err := DataRoot(root)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, "preferences.json")
+	return lockedFile(path, func() error {
+		p, err := ReadPreferences(root)
+		if err != nil {
+			return err
+		}
+		p.AgentSimulation = enabled
 		return atomic(path, p)
 	})
 }
