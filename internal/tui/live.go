@@ -31,6 +31,7 @@ type menuItem struct{ Label, Action, Value string }
 type startMsg struct{}
 
 func (m *model) initialLoad() tea.Cmd {
+	m.stopPagePrefetch()
 	if m.pendingRestore == nil {
 		m.kind, m.board, m.page, m.filter, m.reading, m.newest = "timeline", 0, 1, "", false, false
 	}
@@ -137,6 +138,7 @@ func (m *model) displayThread(p forum.Post) thread {
 	return thread{p.ID, board, title, excerpt, []post{m.displayPost(p)}}
 }
 func (m *model) applyPage(p forum.Page) {
+	m.stopPagePrefetch()
 	m.homeThread = 0
 	m.loadedThreadID = 0
 	m.listWindow = newPageWindow(p)
@@ -203,6 +205,7 @@ func (m *model) leaveReading() {
 	m.refreshReader(false)
 }
 func (m *model) loadList(page int) tea.Cmd {
+	m.stopPagePrefetch()
 	m.loadedThreadID = 0
 	m.listError = ""
 	kind, id := m.kind, 0
@@ -216,6 +219,7 @@ func (m *model) loadList(page int) tea.Cmd {
 // Homepage content is already identified by the timeline; request its first
 // page directly, without looking up the previous session or refetching the root.
 func (m *model) loadHomeThread(id int) tea.Cmd {
+	m.threadPrefetch.clear()
 	root, ok := m.raw[id]
 	if !ok {
 		return m.loadThread(id, 1, 0)
@@ -230,6 +234,7 @@ func (m *model) loadHomeThread(id int) tea.Cmd {
 }
 
 func (m *model) loadThread(id, page, target int) tea.Cmd {
+	m.threadPrefetch.clear()
 	if t := m.current(); m.reading && t != nil && t.id == id && m.pages[t.id].Page == page {
 		m.savePosition()
 	}
@@ -259,6 +264,7 @@ func (m *model) loadThread(id, page, target int) tea.Cmd {
 	})
 }
 func (m *model) applyThread(r threadResult) {
+	m.threadPrefetch.clear()
 	m.homeThread = 0
 	m.loadedThreadID = r.Root.ID
 	m.threadWindow = newPageWindow(r.Page)
@@ -313,6 +319,19 @@ func (m *model) openBoards() {
 		m.menu = append(m.menu, menuItem{"我的内容 · 含删除记录", "mine", ""})
 	}
 	m.menuIndex = 0
+	action, value := "board", "0"
+	switch m.kind {
+	case "board":
+		value = strconv.Itoa(m.board)
+	case "sage", "mine":
+		action, value = m.kind, ""
+	}
+	for i, item := range m.menu {
+		if item.Action == action && item.Value == value {
+			m.menuIndex = i
+			break
+		}
+	}
 	m.modal = "menu"
 	m.returnModal = "板块与时间线"
 }

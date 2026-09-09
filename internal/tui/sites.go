@@ -100,6 +100,7 @@ func (m *model) switchSite(id string) tea.Cmd {
 	if m.cancel != nil {
 		m.cancel()
 	}
+	m.stopPagePrefetch()
 	*m = next
 	m.rememberSite()
 	m.refilter()

@@ -163,10 +163,12 @@ func (m *model) focusMouseList() {
 	}
 }
 func (m model) listAt(y int) int {
+	m.setListOffset(m.listVisualOffset())
 	row := y - m.listContentTop()
-	if row < 0 {
+	if row < 0 || row >= m.panelHeight()-4 {
 		return -1
 	}
+	row += m.listInset
 	for i, end := m.listTop, m.listEnd(m.listTop); i < end; i++ {
 		height := m.listItemHeight(i)
 		if row < height-1 {
@@ -348,10 +350,7 @@ func (m *model) mouseClick(c tea.MouseClickMsg) tea.Cmd {
 		if index < 0 {
 			return nil
 		}
-		titleY := m.listContentTop()
-		for i := m.listTop; i < index; i++ {
-			titleY += m.listItemHeight(i)
-		}
+		titleY := m.listContentTop() + m.listRow(index) - m.listVisualOffset()
 		titleClick := c.Y == titleY && c.X >= 4 && c.X < m.listWidth()-2
 		m.focusMouseList()
 		now := time.Now()

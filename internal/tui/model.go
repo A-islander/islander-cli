@@ -17,11 +17,13 @@ import (
 )
 
 type model struct {
+	help                                              helpState
 	theme                                             terminalTheme
 	chatStyle                                         bool
 	agentSeed                                         uint64
 	agentWorking                                      agentWorkingState
 	readerScroll                                      readerScrollState
+	listScroll                                        listScrollState
 	lastListClick                                     listClick
 	loadedThreadID                                    int
 	homeThread                                        int
@@ -44,6 +46,7 @@ type model struct {
 	kaomojiError                                      string
 	cookieNotice                                      string
 	listWindow, threadWindow                          pageWindow
+	listPrefetch, threadPrefetch                      pagePrefetch
 	pageJumpError                                     string
 	attachment                                        attachmentView
 	jumpSource                                        *thread
@@ -79,22 +82,22 @@ type model struct {
 	pendingMine                                       bool
 	filePicker                                        fileBrowser
 
-	threads                  []thread
-	visible                  []int
-	board, selected, listTop int
-	width, height            int
-	reading, fullscreen      bool
-	reader, popup            viewport.Model
-	input                    textinput.Model
-	modal, filter, notice    string
-	offsets                  map[int]int
-	readerSelections         map[int]string
-	postLines                []int
-	activePost               int
-	activeQuote              string
-	inlineQuotes             map[string][]inlineQuote
-	quoteOffsets             map[string]int
-	readerItems              []readerItem
+	threads                             []thread
+	visible                             []int
+	board, selected, listTop, listInset int
+	width, height                       int
+	reading, fullscreen                 bool
+	reader, popup                       viewport.Model
+	input                               textinput.Model
+	modal, filter, notice               string
+	offsets                             map[int]int
+	readerSelections                    map[int]string
+	postLines                           []int
+	activePost                          int
+	activeQuote                         string
+	inlineQuotes                        map[string][]inlineQuote
+	quoteOffsets                        map[string]int
+	readerItems                         []readerItem
 }
 
 func newModel() model {
@@ -153,6 +156,7 @@ func (m *model) refilter() {
 		m.visible = append(m.visible, i)
 	}
 	m.selected, m.listTop, m.activePost = 0, 0, 0
+	m.listInset = 0
 	m.activeQuote = ""
 	m.refreshReader(true)
 }
@@ -360,9 +364,6 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "q":
 			return m, tea.Quit
-		case "?":
-			m.modal = "help"
-			return m, nil
 		case "/":
 			return m, m.startInput("filter")
 		case ":":

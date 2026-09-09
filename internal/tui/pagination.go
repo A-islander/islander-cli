@@ -12,6 +12,7 @@ import (
 
 type pagePosition struct{ page, index int }
 type pageWindow struct {
+	id          uint64
 	first, last int
 	pages       map[int]forum.Page
 	positions   map[int]pagePosition
@@ -19,7 +20,7 @@ type pageWindow struct {
 }
 
 func newPageWindow(p forum.Page) pageWindow {
-	w := pageWindow{first: p.Page, last: p.Page, pages: map[int]forum.Page{}, positions: map[int]pagePosition{}, blocked: map[int]bool{}}
+	w := pageWindow{id: pageWindowSequence.Add(1), first: p.Page, last: p.Page, pages: map[int]forum.Page{}, positions: map[int]pagePosition{}, blocked: map[int]bool{}}
 	w.add(p)
 	return w
 }
@@ -112,6 +113,10 @@ func (m *model) requestPage(page int, extend bool, direction int, key string, la
 	}
 	m.modal = ""
 	m.input.Blur()
+	if m.usePrefetchedPage(paginationResult{page: forum.Page{Page: page}, rootID: id, direction: direction, key: key, reading: reading, extend: extend, latest: latest}) {
+		return nil
+	}
+	m.activePrefetch().clear()
 	return m.launch("pagination", func(ctx context.Context, c forum.Backend) (any, error) {
 		p, err := c.List(ctx, kind, id, page)
 		if err == nil && p.Page != page {

@@ -318,6 +318,7 @@ func (m model) listPanel() string {
 	return m.browsePanel(m.listContent(), m.listWidth(), m.panelHeight(), !m.reading)
 }
 func (m model) listContent() string {
+	m.setListOffset(m.listVisualOffset())
 	w := m.listWidth()
 	iw := w - 6
 	title := strong("岛上此刻", foam)
@@ -376,6 +377,11 @@ func (m model) listContent() string {
 		}
 		lines = append(lines, "")
 	}
+	if len(m.visible) > 0 {
+		cards := lines[2:]
+		cards = cards[min(m.listInset, len(cards)):]
+		lines = append(lines[:2], cards[:min(len(cards), max(1, m.panelHeight()-4))]...)
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -431,6 +437,9 @@ func (m model) readerPanel() string {
 }
 
 func (m model) dialog() string {
+	if m.isHelp() {
+		return m.helpDialog()
+	}
 	if m.modal == "attachment" {
 		return m.attachmentDialog()
 	}
@@ -441,20 +450,6 @@ func (m model) dialog() string {
 	iw := w - 6
 	var content string
 	switch m.modal {
-	case "help":
-		content = strong("上岛指南", teal) + "\n" + ink("键盘就够了。找到一条串，慢慢读。", muted) + "\n\n" +
-			"↑ ↓ / j k     选串或选中楼层\n" +
-			"Enter / Tab   进入阅读 / 切换焦点\n" +
-			"Esc / h       返回列表，保留阅读位置\n" +
-			"n / p         下一楼 / 上一楼\n" +
-			"v             原位展开 / 收起引用\n" +
-			"PgUp / PgDn   翻页（正文也可用空格）\n" +
-			"1 — 5         全部 / 日常 / 游戏 / 技术 / 创作\n" +
-			"/             筛选本地串的标题、摘要和编号\n" +
-			":             按 No.编号定位主楼或回复\n" +
-			"f             切换分栏 / 单栏（宽屏）\n" +
-			"q / Ctrl+C    退出\n\n" +
-			ink("离线原型 · 全部内容虚构 · 不连接正式服务", sand)
 	case "filter", "jump":
 		title, hint := "筛选已加载的串", "只筛选本地标题、摘要和编号；留空可清除。"
 		if m.modal == "jump" {
@@ -462,9 +457,7 @@ func (m model) dialog() string {
 		}
 		content = strong(title, teal) + "\n\n" + ink(ansi.Wrap(hint, iw, ""), muted) + "\n\n" + m.input.View() + "\n\n" + ink("Enter 确定 · Esc 取消", muted)
 	}
-	if m.modal == "help" && m.height < 28 {
-		content = strong("上岛指南", teal) + "\n\n↑↓ / jk 选串、逐行读长楼\nEnter / Tab 阅读、切换\nEsc 返回 · n/p 换楼 · v 引用\n1—5 板块 · / 筛选 · : 定位\nf 布局 · PgUp/PgDn 滚动\nq 退出 · Esc 关闭帮助"
-	}
+
 	h := min(m.height-4, lipgloss.Height(content)+4)
 	return panel("\n"+content, w, h, true)
 }

@@ -127,19 +127,19 @@ func TestMouseSelectsVisibleFloorDuringAnimation(t *testing.T) {
 
 func TestWheelPagesOnlyAfterSelectingLastFloor(t *testing.T) {
 	m, backend := pagingModel(t, true, 1)
-	// Both replies fit on screen: merely seeing the bottom must not skip
-	// selecting the second reply and fetch the next page early.
-	m = readerWheel(m, tea.MouseWheelDown)
-	if m.selectedKey() != "111" || m.busy || len(backend.calls) != 0 {
-		t.Fatal("wheel requested a page before selecting the last reply")
-	}
+	// Seeing the bottom may prefetch, but must not skip selecting the last floor.
 	n, cmd := m.Update(tea.MouseWheelMsg{X: m.readerX() + 6, Y: m.readerTop() + 1, Button: tea.MouseWheelDown})
-	m = n.(model)
-	if !m.busy || cmd == nil {
-		t.Fatal("wheel did not request the next page")
+	m = drainPageCommands(n.(model), cmd)
+	if m.selectedKey() != "111" || m.busy || len(m.current().posts) != 2 || fmt.Sprint(backend.calls) != "[2]" {
+		t.Fatal("prefetch moved beyond the selected reply")
 	}
-	m = applyCommand(m, cmd)
-	if m.selectedKey() != "120" || fmt.Sprint(backend.calls) != "[2]" {
+	n, cmd = m.Update(tea.MouseWheelMsg{X: m.readerX() + 6, Y: m.readerTop() + 1, Button: tea.MouseWheelDown})
+	m = n.(model)
+	if m.busy {
+		t.Fatal("cached page blocked wheel browsing")
+	}
+	m = drainPageCommands(m, cmd)
+	if m.selectedKey() != "120" || fmt.Sprint(backend.calls) != "[2 3]" {
 		t.Fatal("wheel did not continue onto the next page")
 	}
 }

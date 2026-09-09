@@ -21,6 +21,7 @@ type persistenceTick struct{ ID uint64 }
 type draftSaveTick struct{ ID uint64 }
 
 func (m *model) loadPersistence() {
+	m.stopPagePrefetch()
 	m.listWindow, m.threadWindow = pageWindow{}, pageWindow{}
 	m.stateReady = false
 	m.pendingRestore = nil
@@ -274,6 +275,7 @@ func (m *model) resumeAfterList() tea.Cmd {
 }
 
 func (m *model) resumeThread(n local.Navigation) tea.Cmd {
+	m.threadPrefetch.clear()
 	m.pendingRestore = &n
 	return m.launch("resume-thread", func(ctx context.Context, c forum.Backend) (any, error) {
 		return fetchRestoredThread(ctx, c, n)

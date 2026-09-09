@@ -19,7 +19,14 @@ func applyCommand(m model, c tea.Cmd) model {
 	if c == nil {
 		return m
 	}
-	n, _ := m.Update(c())
+	msg := c()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, cmd := range batch {
+			m = applyCommand(m, cmd)
+		}
+		return m
+	}
+	n, _ := m.Update(msg)
 	return n.(model)
 }
 func TestLiveQuoteReplyPublishAndPinnedIdentity(t *testing.T) {

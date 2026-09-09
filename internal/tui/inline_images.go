@@ -467,7 +467,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.theme.bg = c.Color
 		return m, nil
 	case tea.KeyPressMsg:
-		if c.String() == "f7" {
+		if c.String() == "f7" && !m.isHelp() {
 			cmd := m.toggleTheme()
 			return m, cmd
 		}
@@ -476,18 +476,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.advanceReaderScroll(tick)
 		return m, cmd
 	}
+	if tick, ok := msg.(listScrollTick); ok {
+		cmd := m.advanceListScroll(tick)
+		return m, cmd
+	}
 	if tick, ok := msg.(agentWorkingTick); ok {
 		cmd := m.advanceAgentWorking(tick)
 		return m, cmd
 	}
 	from, animate := m.readerVisualOffset(), m.readerFloorInput(msg)
+	listFrom, listAnimate := m.listVisualOffset(), m.listScrollInput(msg)
 	switch msg.(type) {
 	case tea.MouseClickMsg:
 		// Pointer hit testing must use the frame the user actually clicked.
 		m.reader.SetYOffset(from)
 		m.readerScroll = readerScrollState{}
+		m.setListOffset(listFrom)
+		m.listScroll = listScrollState{}
 	case tea.KeyPressMsg, tea.MouseWheelMsg, tea.WindowSizeMsg:
 		m.readerScroll = readerScrollState{}
+		m.listScroll = listScrollState{}
 	}
 	cmd, handled := m.inlineImagesUpdate(msg)
 	if !handled {
@@ -506,7 +514,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if !m.readerScrollValid() {
 		m.readerScroll = readerScrollState{}
 	}
-	more := tea.Batch(images, scroll, m.syncAgentWorking(time.Now()))
+	var listScroll tea.Cmd
+	if listAnimate {
+		listScroll = m.startListScroll(listFrom)
+	} else if !m.listScrollValid() {
+		m.listScroll = listScrollState{}
+	}
+	more := tea.Batch(images, scroll, listScroll, m.syncAgentWorking(time.Now()), m.preparePagePrefetch())
 	if cmd == nil {
 		return m, more
 	}

@@ -72,6 +72,9 @@ func (m *model) resizeEditor() {
 			state.Text = lipgloss.NewStyle().Foreground(lipgloss.Color(foam))
 			state.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color(muted))
 			state.Selection = lipgloss.NewStyle().Background(lipgloss.Color(selectedBG))
+			if m.chatStyle {
+				state.Selection = lipgloss.NewStyle().Reverse(true)
+			}
 		}
 	}
 	if m.theme.name == "el" {
@@ -89,7 +92,7 @@ func (m *model) resizeEditor() {
 		m.editor.Prompt = "› "
 	}
 	if m.inlineAgentCompose() {
-		m.editor.SetWidth(max(8, m.width-4))
+		m.editor.SetWidth(max(8, m.width-6))
 		m.editor.SetHeight(max(1, m.replyBoxHeight()-2))
 	} else {
 		m.editor.SetWidth(max(10, min(70, m.width-14)))
@@ -133,11 +136,14 @@ func (m model) agentReplyBox() string {
 	if m.inlineAgentCompose() {
 		body = m.editor.View()
 	}
-	rule := ink(strings.Repeat("─", w), lineColor)
-	return rule + "\n" + rectangle(body, w, 3) + "\n" + rule
+	lines := []string{highlightLine("", w)}
+	for _, line := range strings.Split(rectangle(body, w-2, 3), "\n") {
+		lines = append(lines, highlightLine(" "+line+" ", w))
+	}
+	return strings.Join(append(lines, highlightLine("", w)), "\n")
 }
 func (m *model) clickAgentReply(c tea.MouseClickMsg) (tea.Cmd, bool) {
-	if !m.chatStyle || c.Button != tea.MouseLeft || c.X < 2 || c.X >= m.width-2 || c.Y <= m.agentReplyTop() || c.Y >= m.agentReplyTop()+4 {
+	if !m.chatStyle || c.Button != tea.MouseLeft || c.X < 2 || c.X >= m.width-2 || c.Y < m.agentReplyTop() || c.Y >= m.agentReplyTop()+m.replyBoxHeight() {
 		return nil, false
 	}
 	if m.inlineAgentCompose() {
