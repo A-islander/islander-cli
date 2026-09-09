@@ -82,6 +82,9 @@ func screenView(width, height int, layers ...*lipgloss.Layer) tea.View {
 	return themedScreenView(width, height, false, layers...)
 }
 func themedScreenView(width, height int, agent bool, layers ...*lipgloss.Layer) tea.View {
+	return paletteScreenView(width, height, agent, nil, layers...)
+}
+func paletteScreenView(width, height int, agent bool, palette themePalette, layers ...*lipgloss.Layer) tea.View {
 	canvas := lipgloss.NewCanvas(width, height).Compose(lipgloss.NewCompositor(layers...))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -96,7 +99,18 @@ func themedScreenView(width, height int, agent bool, layers ...*lipgloss.Layer) 
 			if cell.Style.Fg == nil {
 				cell.Style.Fg = lipgloss.Color(foam)
 			}
-			if agent {
+			// Kitty placeholder foreground encodes image IDs; block pixels carry
+			// actual image RGB. Never interpret either as a theme color.
+			pixels := strings.ContainsAny(cell.Content, "▀▄")
+			placeholder := strings.ContainsRune(cell.Content, '\U0010eeee')
+			if palette != nil {
+				if !pixels {
+					cell.Style.Bg = palette.mapColor(cell.Style.Bg)
+				}
+				if !pixels && !placeholder {
+					cell.Style.Fg = palette.mapColor(cell.Style.Fg)
+				}
+			} else if agent && palette == nil {
 				cell.Style.Bg = agentColor(cell.Style.Bg)
 				cell.Style.Fg = agentColor(cell.Style.Fg)
 			}
@@ -461,7 +475,7 @@ func (m model) View() tea.View {
 	m.reader.SetYOffset(m.readerVisualOffset())
 	name, wordmark, slogan := m.siteBranding()
 	if m.width < 44 || m.height < 16 {
-		return screenView(m.width, m.height, lipgloss.NewLayer(rectangle(name+"\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
+		return m.themedView(m.chatStyle, lipgloss.NewLayer(rectangle(name+"\n\n请把终端放大到至少 44 列 × 16 行。\nq 或 Ctrl+C 退出", m.width, m.height)))
 	}
 	if m.chatStyle {
 		return m.agentView()
@@ -488,12 +502,12 @@ func (m model) View() tea.View {
 	if m.replyBoxHeight() > 0 {
 		body += "\n" + m.agentReplyBox()
 	}
-	help := "b 板块  P 跳页  H 历史  F 收藏  Enter 阅读  a 图片  ? 帮助"
+	help := "b 板块  F7 主题  P 跳页  H 历史  F 收藏  Enter 阅读  a 图片  ? 帮助"
 	if m.reading {
-		help = "b 板块  P 跳页  H 历史  F 收藏  a 图片  r 回复 R 引用  Enter 操作  ? 帮助"
+		help = "b 板块  F7 主题  P 跳页  H 历史  F 收藏  a 图片  r 回复 R 引用  Enter 操作  ? 帮助"
 	}
 	if m.width < 80 {
-		help = "b 板块 P 跳页 H 历史 F 收藏 ? 帮助"
+		help = "b 板块 F7 主题 P 跳页 ? 帮助"
 	}
 	if m.inlineCapability() == 1 && len(m.imageSlots) > 0 && (m.reading || m.split()) {
 		help = "+/- 小图  " + help
@@ -520,7 +534,7 @@ func (m model) View() tea.View {
 		dialog := m.dialog()
 		layers = append(layers, lipgloss.NewLayer(dialog).X((m.width-lipgloss.Width(dialog))/2).Y((m.height-lipgloss.Height(dialog))/2).Z(1))
 	}
-	v := screenView(m.width, m.height, layers...)
+	v := m.themedView(false, layers...)
 	v.MouseMode = tea.MouseModeCellMotion
 	if !m.opts.Demo {
 		v.ReportFocus = true

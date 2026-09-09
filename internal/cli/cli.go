@@ -23,6 +23,7 @@ type app struct {
 	f, u, dir, backend, cookie, output, images string
 	site, token                                string
 	stateWarning                               string
+	theme                                      string
 	demo                                       bool
 	store                                      *local.Store
 	client                                     forum.Backend
@@ -107,6 +108,9 @@ func (a *app) root() *cobra.Command {
 		if a.images != "auto" && a.images != "kitty" && a.images != "blocks" && a.images != "off" {
 			return errors.New("images 只能是 auto、kitty、blocks 或 off")
 		}
+		if !tui.ValidTheme(a.theme) {
+			return errors.New("theme 只能是 islander 或 el")
+		}
 		var e error
 		a.restoreTUISite(cmd)
 		site, e := forum.Resolve(a.site, a.f, a.u)
@@ -129,11 +133,12 @@ func (a *app) root() *cobra.Command {
 		return e
 	}
 	run := func(*cobra.Command, []string) error {
-		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo, StateWarning: a.stateWarning})
+		return tui.Run(tui.Options{Site: a.site, DataDir: a.dir, Backend: a.backend, ForumURL: a.f, UserURL: a.u, Images: a.images, Cookie: a.cookie, Store: a.store, Demo: a.demo, StateWarning: a.stateWarning, Theme: a.theme})
 	}
 	root.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 	tc := &cobra.Command{Use: "tui", Short: "交互浏览论坛；首次默认 X 岛，之后沿用上次站点", Args: cobra.NoArgs, RunE: run}
 	tc.Flags().BoolVar(&a.demo, "demo", false, "离线浏览体验")
+	tc.Flags().StringVar(&a.theme, "theme", "", "islander 原主题、el 柔和跟随终端；默认沿用上次选择")
 	root.AddCommand(tc)
 	hidden := &cobra.Command{Use: "_image URL MODE", Hidden: true, Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, args []string) error { return media.Viewer(args[0], args[1]) }}
 	root.AddCommand(hidden)
