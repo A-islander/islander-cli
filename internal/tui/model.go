@@ -17,6 +17,7 @@ import (
 )
 
 type model struct {
+	theme                                             terminalTheme
 	chatStyle                                         bool
 	agentSeed                                         uint64
 	agentWorking                                      agentWorkingState
@@ -117,9 +118,9 @@ func newModel() model {
 
 func (m model) Init() tea.Cmd {
 	if m.opts.Demo {
-		return nil
+		return m.requestThemeColors()
 	}
-	return func() tea.Msg { return startMsg{} }
+	return tea.Batch(func() tea.Msg { return startMsg{} }, m.requestThemeColors())
 }
 
 func (m model) current() *thread {

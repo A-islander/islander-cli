@@ -15,6 +15,7 @@ import (
 )
 
 type Preferences struct {
+	Theme           string                `json:"theme,omitempty"`
 	AgentSimulation bool                  `json:"agentSimulation,omitempty"`
 	Version         int                   `json:"version"`
 	LastSite        forum.Site            `json:"lastSite"`
@@ -56,6 +57,10 @@ func ReadPreferences(root string) (Preferences, error) {
 		return p, err
 	}
 	err = readVersioned(filepath.Join(root, "preferences.json"), &p)
+	// Preserve the selection saved by the initial terminal-theme prototype.
+	if err == nil && p.Theme == "terminal" {
+		p.Theme = "el"
+	}
 	if p.Sites == nil {
 		p.Sites = map[string]forum.Site{}
 	}
@@ -117,6 +122,26 @@ func RememberAgentSimulation(root string, enabled bool) error {
 			return err
 		}
 		p.AgentSimulation = enabled
+		return atomic(path, p)
+	})
+}
+
+// RememberTheme preserves the last site and Agent layout preference.
+func RememberTheme(root, theme string) error {
+	if theme != "islander" && theme != "el" {
+		return errors.New("无效的主题")
+	}
+	root, err := DataRoot(root)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, "preferences.json")
+	return lockedFile(path, func() error {
+		p, err := ReadPreferences(root)
+		if err != nil {
+			return err
+		}
+		p.Theme = theme
 		return atomic(path, p)
 	})
 }

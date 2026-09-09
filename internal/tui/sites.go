@@ -86,6 +86,7 @@ func (m *model) switchSite(id string) tea.Cmd {
 	next.requestID = m.requestID + 1
 	next.fullscreen = m.fullscreen
 	next.chatStyle = m.chatStyle
+	next.theme = m.theme
 	next.agentSeed = m.agentSeed
 	next.imageCache = m.imageCache
 	next.resize(m.width, m.height)

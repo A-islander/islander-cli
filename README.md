@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.9**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.10**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.9
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.10
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.9-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.9-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.9-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.9-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.9-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.9-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.10-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.10-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.10-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.10-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.10-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.10-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.9-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.10-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.9-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.9-linux-x86_64.AppImage
-./islander-v0.0.9-linux-x86_64.AppImage
-./islander-v0.0.9-linux-x86_64.AppImage --version
-./islander-v0.0.9-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.10-linux-x86_64.AppImage
+./islander-v0.0.10-linux-x86_64.AppImage
+./islander-v0.0.10-linux-x86_64.AppImage --version
+./islander-v0.0.10-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -182,6 +182,8 @@ v0.0.3 新增状态保存：无参数站点的 `islander tui` 记住上次访问
 `Ctrl+[` / `Ctrl+]` 切换当前岛的上一个 / 下一个板块（包含时间线，到边界停止），两种布局通用；终端需支持区分 `Ctrl+[` 与 Esc，不支持时可按 `b` 选择板块。图片浏览页内滚轮向上放大、向下缩小，串内滚轮仍滚动正文；点击串内小图进入原图浏览。
 
 鼠标支持左侧单击标题行直接进入阅读（无标题时点击首行正文），其他卡片行单击选串、双击阅读；右侧单击选楼层、右键打开操作菜单，菜单打开后再次右键或点击外部关闭；滚轮跟随鼠标所在栏，并支持边界自动翻页。板块标签、我的内容、菜单项、引用提示、附件和页码均可点击。编辑器可用 `Shift+方向键` 选中文本、`Ctrl+G` 全选、`Ctrl+Shift+C` 复制选区、`Ctrl+V` 粘贴到光标处；复制粘贴依赖终端/系统剪贴板支持，若快捷键被终端截获，按终端配置执行。论坛正文尚无应用内鼠标选区复制功能。
+
+按 **F7** 在原主题和“el（柔和跟随终端）”之间切换，并记住选择。也可以运行 `islander tui --theme el` 本次使用终端主题，或 `--theme islander` 本次使用原主题。终端主题读取终端前景色与背景色，柔化高饱和度正文，并协调选中行、边框、编辑框及 Agent 页面；图片保持原色。Ghostty 等返回颜色查询的终端可自动适配，终端或 tmux 没有返回完整颜色时保留原主题，不影响浏览。程序不会修改终端配置；在终端内更换配色后，可按两次 F7 重新读取。详见 [终端主题 spec](docs/specs/terminal-theme.md)。
 
 顶部 **`F6 Agent模拟切换`** 按钮（或按 `F6`）切换为 Codex 风格的独立对话页面：深灰底、白灰文字，隐藏论坛顶栏、板块标签、标语和常驻快捷键提示，隐藏作者 ID、帖子编号、楼层和时间，以通用文件读取记录及随机穿插的 `Ran …` 工具输出模拟对话过程。命令块对命令、参数、路径、字符串和输出分别配色。输入区上方显示 `Working (4m 31s • esc to interrupt)`：进入帖子开始计时，Working 高光从左向右循环扫过，退出阅读停止。工具输出仅为预设文字，同次运行内位置稳定，不执行其中的命令；正文引用编号在浏览时显示为 `[reference]`，原始内容和回复目标保留。底部保留 `›` 输入区与模拟状态行 `gpt-6-astra high · ~/Develope/islander · Main [default]`。点击输入区或按 `r` 回复，`R` 引用选中楼层；Enter 换行，`Ctrl+P` 预览、确认页 Enter 发送，Esc 保存草稿，颜文字和附件选择沿用。按 **F6** 返回论坛，阅读位置与编辑内容保留；`b` 板块、`g` 切岛等按键在模拟页仍有效。模型、目录和分支文字是模拟装饰，不调用 AI，也不读取本机 Git 状态。模式切换立即保存到 `preferences.json`，下次启动沿用；再次切回论坛也会记住。Agent 模式启动或从列表切入时保持在帖子列表，后台加载第一条的串首页；单击卡片任意内容行进入阅读，复用已加载内容；点击顶部最右侧的 **`exit`** 返回串列表，保留列表和阅读位置。见 [鼠标和 Agent 模拟 spec](docs/specs/mouse-agent-style.md)。
 
@@ -333,20 +335,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.9
+make release VERSION=v0.0.10
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.9 --arch aarch64
+python3 scripts/package.py --version v0.0.10 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.9 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.9 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.10 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.10 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

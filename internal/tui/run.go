@@ -15,16 +15,22 @@ type Options struct {
 	ForumURL, UserURL, Images, Cookie string
 	Site, DataDir, Backend            string
 	StateWarning                      string
+	Theme                             string
 	Store                             *local.Store
 	Demo                              bool
 }
 
 func Run(o Options) error {
+	if !ValidTheme(o.Theme) {
+		return fmt.Errorf("theme 只能是 islander 或 el")
+	}
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return fmt.Errorf("TUI 需要交互终端；程序读取请使用 --output json 命令")
 	}
 	m := newModel()
 	m.opts = o
+	m.theme.name = o.Theme
+	m.resizeEditor()
 	m.store = o.Store
 	m.stateError = o.StateWarning
 	if directory, err := media.ImageCacheDir(o.DataDir); err == nil {

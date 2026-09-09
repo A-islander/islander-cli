@@ -988,7 +988,7 @@ func (m model) extendedDialog() (string, bool) {
 	case "attachment":
 		content = strong("附件", teal) + "\n\n" + bodyText(m.menu[m.menuIndex].Value, iw) + "\n\n" + ink("Enter 终端预览 · o 系统打开 · s 下载 · Esc 返回", sand)
 	case "live-help":
-		content = strong("上岛指南", teal) + "\n\n" + bodyText("鼠标：点击标题阅读 · 点击选楼层 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\nCtrl+[ / Ctrl+] 前后板块\ng 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\n底色高亮选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F3 颜文字 · F2 编辑历史\nTab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
+		content = strong("上岛指南", teal) + "\n\n" + bodyText("鼠标：点击标题阅读 · 点击选楼层 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\nF7 原主题 / el（柔和跟随终端）\nCtrl+[ / Ctrl+] 前后板块\ng 切换站点 · H 浏览历史 · F 收藏\n* 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\n底色高亮选中帖子 · Esc 引用返回上层\nn/p 上下楼 · PgUp/PgDn / 空格 滚动正文\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · 可继续展开嵌套引用\n: 按编号定位\nm 我的内容 · b 板块 / SAGE · [ ] 前后页\nc 发串 · r 回复 · R 引用选中楼层\ni 饼干管理 · d 本地草稿 · a 选中楼层附件\ns SAGE · S 反对 SAGE · x 删除 · X 恢复\n/ 筛选当前页 · t 页内最新发布 · L 站务友链\nCtrl+R 刷新 · f 布局\n编辑：F3 颜文字 · F2 编辑历史\nTab 切标题/正文 · Ctrl+A 浏览文件\nCtrl+X 移除草稿附件 · Ctrl+P 预览发布\nEsc / Ctrl+S 保存草稿 · q 退出", iw)
 		if !m.capabilities().Manage {
 			replyHelp := "发帖、我的内容及管理操作尚未接入。"
 			if m.capabilities().Reply {
@@ -997,7 +997,7 @@ func (m model) extendedDialog() (string, bool) {
 			if m.capabilities().Publish {
 				replyHelp = "c 发串 · r 回复 · R 引用回复 · d 草稿\nF3 颜文字 · F2 编辑历史\nCtrl+A 选图 · Ctrl+P 预览后确认发送\n我的内容及管理操作尚未接入。"
 			}
-			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("鼠标：点击标题阅读 · 点击选楼层 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\nCtrl+[ / Ctrl+] 前后板块\ng 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 加载附件 · +/- 小图大小\n[ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
+			content = strong(m.environmentLabel()+" · 浏览指南", teal) + "\n\n" + bodyText("鼠标：点击标题阅读 · 点击选楼层 · 右键操作\n滚轮跟随所在栏 · F6 Agent模拟切换\nF7 原主题 / el（柔和跟随终端）\nCtrl+[ / Ctrl+] 前后板块\ng 切换站点 · b 板块 · H 浏览历史 · i 饼干\nF 收藏列表 · * 收藏 / 取消收藏当前主串\n↑↓ / jk 选串；长楼逐行读完再换楼 · Enter 操作\nn/p 上下楼 · PgUp/PgDn 滚动\n读到边界自动加载 · P 按页码跳转\nv 原位展开 / 收起引用 · Esc 返回上层\na 加载附件 · +/- 小图大小\n[ ] 前后页 · : 按主串编号定位\n/ 当前页筛选 · Ctrl+R 刷新 · f 布局\nq 退出\n\n"+replyHelp, iw)
 		}
 	default:
 		return "", false

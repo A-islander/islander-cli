@@ -457,6 +457,21 @@ func (m *model) inlineImagesUpdate(msg tea.Msg) (tea.Cmd, bool) {
 // Run reconciliation after navigation and async results, so downloads never
 // originate in View and obsolete results cannot revive another thread's images.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Color replies affect only presentation, not API requests, image downloads
+	// or reading position. Unsupported terminals simply never send these.
+	switch c := msg.(type) {
+	case tea.ForegroundColorMsg:
+		m.theme.fg = c.Color
+		return m, nil
+	case tea.BackgroundColorMsg:
+		m.theme.bg = c.Color
+		return m, nil
+	case tea.KeyPressMsg:
+		if c.String() == "f7" {
+			cmd := m.toggleTheme()
+			return m, cmd
+		}
+	}
 	if tick, ok := msg.(readerScrollTick); ok {
 		cmd := m.advanceReaderScroll(tick)
 		return m, cmd

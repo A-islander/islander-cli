@@ -65,7 +65,7 @@ func (m model) inlineAgentCompose() bool {
 }
 func (m *model) resizeEditor() {
 	styles := textarea.DefaultDarkStyles()
-	if m.chatStyle {
+	if m.chatStyle || m.theme.name == "el" {
 		for _, state := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
 			state.CursorLine = lipgloss.NewStyle()
 			state.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color(foam))
@@ -74,6 +74,15 @@ func (m *model) resizeEditor() {
 			state.Selection = lipgloss.NewStyle().Background(lipgloss.Color(selectedBG))
 		}
 	}
+	if m.theme.name == "el" {
+		styles.Cursor.Color = lipgloss.Color(foam)
+		for _, state := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
+			state.LineNumber = lipgloss.NewStyle().Foreground(lipgloss.Color(muted))
+			state.CursorLineNumber = state.LineNumber
+			state.EndOfBuffer = state.LineNumber
+		}
+	}
+	m.styleThemeInputs()
 	m.editor.SetStyles(styles)
 	m.editor.Prompt = "┃ "
 	if m.inlineAgentCompose() {
@@ -185,7 +194,7 @@ func (m model) agentView() tea.View {
 		dialog := m.dialog()
 		layers = append(layers, lipgloss.NewLayer(dialog).X((m.width-lipgloss.Width(dialog))/2).Y((m.height-lipgloss.Height(dialog))/2).Z(1))
 	}
-	v := themedScreenView(m.width, m.height, true, layers...)
+	v := m.themedView(true, layers...)
 	v.MouseMode = tea.MouseModeCellMotion
 	v.ReportFocus = !m.opts.Demo
 	return v
@@ -286,6 +295,9 @@ func (m *model) loadUIPreferences() {
 		return
 	}
 	m.siteConfigs, m.chatStyle = p.Sites, p.AgentSimulation
+	if m.opts.Theme == "" && ValidTheme(p.Theme) {
+		m.theme.name = p.Theme
+	}
 	m.resize(m.width, m.height)
 }
 func (m *model) rememberAppearance() {
