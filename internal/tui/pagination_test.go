@@ -87,6 +87,25 @@ func pagingKey(m model, key string) (model, tea.Cmd) {
 	n, cmd := m.Update(msg)
 	return n.(model), cmd
 }
+
+// Run data commands, including independent prefetch batches, while leaving
+// display/persistence timers to their dedicated tests.
+func drainPageCommands(m model, cmd tea.Cmd) model {
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	switch v := msg.(type) {
+	case tea.BatchMsg:
+		for _, c := range v {
+			m = drainPageCommands(m, c)
+		}
+	case resultMsg, pagePrefetchResult:
+		next, more := m.Update(msg)
+		m = drainPageCommands(next.(model), more)
+	}
+	return m
+}
 func lastPagingItem(m *model) {
 	if m.reading {
 		m.movePost(len(m.current().posts))
@@ -119,16 +138,17 @@ func TestAutomaticPagingWaitsForLongReplyAndNestedQuote(t *testing.T) {
 			before := m.reader.YOffset()
 			var cmd tea.Cmd
 			m, cmd = pagingKey(m, "j")
-			if cmd != nil || m.busy || m.selectedKey() != item.key || m.reader.YOffset() != before+1 {
+			m = drainPageCommands(m, cmd)
+			if m.busy || m.selectedKey() != item.key || m.reader.YOffset() != before+1 {
 				t.Fatal("auto paging skipped long content")
 			}
 		}
 		m, cmd := pagingKey(m, "j")
-		if !m.busy || cmd == nil {
-			t.Fatal("did not load next page at end")
+		if m.busy {
+			t.Fatal("cached next page blocked reading")
 		}
-		m = applyCommand(m, cmd)
-		if fmt.Sprint(c.calls) != "[2]" || len(m.current().posts) != 4 || m.selectedKey() != "120" || m.navigation().ReadPage != 2 {
+		m = drainPageCommands(m, cmd)
+		if fmt.Sprint(c.calls) != "[2 3]" || len(m.current().posts) != 4 || m.selectedKey() != "120" || m.navigation().ReadPage != 2 {
 			t.Fatalf("wrong continuation: %v %s %+v", c.calls, m.selectedKey(), m.navigation())
 		}
 		m = press(m, "k")
@@ -149,7 +169,7 @@ func TestAutomaticListPagingDeduplicatesAndStopsAtLastPage(t *testing.T) {
 	if second != nil {
 		t.Fatal("duplicate in-flight page request")
 	}
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if len(m.threads) != 4 || m.current().id != 120 || m.page != 2 {
 		t.Fatalf("append/dedup failed: %d %+v", len(m.threads), m.navigation())
 	}
@@ -159,7 +179,7 @@ func TestAutomaticListPagingDeduplicatesAndStopsAtLastPage(t *testing.T) {
 	}
 	lastPagingItem(&m)
 	m, cmd = pagingKey(m, "j")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	lastPagingItem(&m)
 	m, cmd = pagingKey(m, "j")
 	if cmd != nil || fmt.Sprint(c.calls) != "[2 3]" {
@@ -175,7 +195,7 @@ func TestPrependAfterJumpPreservesPositionAndMovesToPreviousTail(t *testing.T) {
 			c.pages[1] = p
 		}
 		m, cmd := pagingKey(m, "k")
-		m = applyCommand(m, cmd)
+		m = drainPageCommands(m, cmd)
 		if fmt.Sprint(c.calls) != "[1]" {
 			t.Fatal("previous page not loaded")
 		}
@@ -205,7 +225,7 @@ func TestPageInputBoundsUnknownTotalsAndLatest(t *testing.T) {
 	}
 	m.input.SetValue("2")
 	m, cmd := pagingKey(m, "enter")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if m.navigation().ReadPage != 2 || len(m.current().posts) != 2 || m.reader.YOffset() != 0 {
 		t.Fatal("numeric jump did not replace loaded range at page start")
 	}
@@ -222,7 +242,7 @@ func TestPageInputBoundsUnknownTotalsAndLatest(t *testing.T) {
 		t.Fatal("jump exceeded known total")
 	}
 	m, cmd = pagingKey(m, "ctrl+l")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if m.selectedKey() != "131" || m.navigation().ReadPage != 3 {
 		t.Fatal("latest reply shortcut missed last reply")
 	}
@@ -240,7 +260,7 @@ func TestPageFailureEmptyAndStaleResponsesRetainContent(t *testing.T) {
 			c.fail = true
 		}
 		m, cmd := pagingKey(m, "j")
-		m = applyCommand(m, cmd)
+		m = drainPageCommands(m, cmd)
 		if len(m.threads) != 2 || m.current().id != 111 || m.page != 1 {
 			t.Fatal("failed/empty request replaced old page")
 		}
@@ -253,7 +273,7 @@ func TestPageFailureEmptyAndStaleResponsesRetainContent(t *testing.T) {
 	lastPagingItem(&m)
 	m, cmd := pagingKey(m, "j")
 	m = press(m, "esc")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if len(m.threads) != 2 || m.current().id != 111 {
 		t.Fatal("cancelled response changed list")
 	}
@@ -261,7 +281,7 @@ func TestPageFailureEmptyAndStaleResponsesRetainContent(t *testing.T) {
 	m = press(m, "P")
 	m.input.SetValue("99")
 	m, cmd = pagingKey(m, "enter")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if m.page != 1 || len(m.threads) != 2 || !strings.Contains(m.notice, "没有内容") {
 		t.Fatal("empty jump destroyed existing content")
 	}
@@ -277,8 +297,8 @@ func TestViewportAndMouseCanAutoPage(t *testing.T) {
 		} else {
 			m, cmd = pagingKey(m, key)
 		}
-		m = applyCommand(m, cmd)
-		if fmt.Sprint(c.calls) != "[2]" || len(m.current().posts) != 4 {
+		m = drainPageCommands(m, cmd)
+		if fmt.Sprint(c.calls) != "[2 3]" || len(m.current().posts) != 4 {
 			t.Fatalf("%s did not continue", key)
 		}
 	}
@@ -328,7 +348,7 @@ func TestPagingFloorsAndSavedPageFollowSelectedPost(t *testing.T) {
 	m.applyThread(threadResult{Root: *c.pages[1].Root, Page: c.pages[1]})
 	lastPagingItem(&m)
 	m, cmd := pagingKey(m, "j")
-	m = applyCommand(m, cmd)
+	m = drainPageCommands(m, cmd)
 	if m.navigation().ReadPage != 2 {
 		t.Fatal("saved page followed initial page")
 	}

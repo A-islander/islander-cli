@@ -58,6 +58,7 @@ func Run(o Options) error {
 	m.imageTerminal = terminal
 	final, err := tea.NewProgram(m).Run()
 	if last, ok := final.(model); ok {
+		last.stopPagePrefetch()
 		cleanup := last.clearInlineImages()
 		if last.attachment.cancel != nil {
 			last.attachment.cancel()

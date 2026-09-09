@@ -33,8 +33,8 @@ func TestMixedTitleListFitsRowsAndKeepsSelectionVisible(t *testing.T) {
 	if find("标题1")-find("正文0") != 3 || find("正文2")-find("标题1") != 4 {
 		t.Fatal("untitled and titled cards should occupy three and four rows")
 	}
-	if find("正文6") < 0 || find("标题7") >= 0 {
-		t.Fatal("mixed rows did not fill the viewport with seven complete cards")
+	if find("正文6") < 0 || find("标题7") < 0 || find("正文8") >= 0 {
+		t.Fatal("mixed rows should fill remaining space with the start of the next card")
 	}
 	m, _ = updateKey(m, tea.KeyPgDown, 0)
 	if m.selected != 7 || !strings.Contains(ansi.Strip(m.listPanel()), "› 标题7") {
@@ -56,7 +56,7 @@ func TestMixedTitleListFitsRowsAndKeepsSelectionVisible(t *testing.T) {
 	m.resize(120, 36)
 	m.applyPage(forum.Page{Page: 1, List: posts})
 	view := ansi.Strip(m.listPanel())
-	if !strings.Contains(view, "正文7") || strings.Contains(view, "正文8") {
+	if !strings.Contains(view, "正文8") || strings.Contains(view, "正文9") {
 		t.Fatal("untitled cards did not use the extra space")
 	}
 }
