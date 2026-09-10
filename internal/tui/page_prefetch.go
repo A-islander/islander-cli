@@ -54,8 +54,8 @@ func (m *model) activePrefetch() *pagePrefetch {
 	return &m.listPrefetch
 }
 
-// Exactly one page ahead of the selected page. Ready pages stay separate from
-// visible content, so background completion cannot move the reading anchor.
+// Fetch exactly one page ahead of the selected page. Attach it once selection
+// reaches the midpoint, without advancing the cursor or the current page.
 func (m *model) preparePagePrefetch() tea.Cmd {
 	if m.opts.Demo || m.client == nil || m.busy || m.modal != "" || (!m.reading && (m.filter != "" || m.newest)) {
 		return nil
@@ -98,6 +98,58 @@ func (m *model) preparePagePrefetch() tea.Cmd {
 			err = fmt.Errorf("预取返回页码与请求不符")
 		}
 		return pagePrefetchResult{window: window, request: request, reading: reading, page: p, err: err}
+	}
+}
+
+// Join cached rows before the cursor reaches the old page boundary. Appending
+// directly avoids refilter's selection reset and any recentering on completion.
+func (m *model) attachPageAhead() {
+	if m.opts.Demo || m.client == nil || m.busy || m.modal != "" || (!m.reading && (m.filter != "" || m.newest)) {
+		return
+	}
+	w, slot := m.activeWindow(), m.activePrefetch()
+	p := m.currentPage()
+	if w.id == 0 || slot.window != w.id || slot.ready == nil || slot.page != p.Page+1 || w.blocked[slot.page] {
+		return
+	}
+	if _, loaded := w.pages[slot.page]; loaded {
+		return
+	}
+	t := m.current()
+	if t == nil || (m.reading && !m.hasLoadedThread()) {
+		return
+	}
+	id := t.id
+	if m.reading {
+		if m.activePost < 0 || m.activePost >= len(t.posts) {
+			return
+		}
+		// Nested quotes belong to their containing floor's page.
+		id = t.posts[m.activePost].id
+	}
+	pos, ok := w.positions[id]
+	if !ok || pos.page != p.Page || pos.index < len(p.List)/2 {
+		return
+	}
+	readerAnimating, listAnimating := m.readerScrollValid(), m.listScrollValid()
+	added := w.add(*slot.ready)
+	slot.clear()
+	if m.reading {
+		for _, row := range added {
+			t.posts = append(t.posts, m.displayPost(row))
+		}
+		m.refreshReader(false)
+		if readerAnimating {
+			m.readerScroll.lines = m.reader.TotalLineCount()
+		}
+	} else {
+		for _, row := range added {
+			m.threads = append(m.threads, m.displayThread(row))
+			m.visible = append(m.visible, len(m.threads)-1)
+		}
+		if listAnimating {
+			m.listScroll.rows = m.listRow(len(m.visible))
+		}
 	}
 }
 

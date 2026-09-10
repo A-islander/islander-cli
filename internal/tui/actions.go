@@ -372,7 +372,7 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	if cmd, handled := m.helpUpdate(msg); handled {
 		return *m, cmd, true
 	}
-	if k, ok := msg.(tea.KeyPressMsg); ok && !m.busy && m.modal == "" && (k.String() == "ctrl+[" || k.String() == "ctrl+]") {
+	if k, ok := msg.(tea.KeyPressMsg); ok && m.canSwitchBoard() && m.modal == "" && (k.String() == "ctrl+[" || k.String() == "ctrl+]") {
 		delta := 1
 		if k.String() == "ctrl+[" {
 			delta = -1
@@ -423,6 +423,10 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.busy = false
 		if r.Err != nil {
+			if r.Kind == "reply-refresh" {
+				m.notice = "回复已发布，刷新失败，已保留阅读位置：" + forum.Clean(r.Err.Error())
+				return *m, nil, true
+			}
 			if r.Kind == "pagination" {
 				v := r.Value.(paginationResult)
 				if v.extend {
@@ -480,10 +484,19 @@ func (m *model) extendedUpdate(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.applyRestoredThread(r.Value.(threadResult))
 		case "inline-quote":
 			m.applyInlineQuotes(r.Value.(inlineQuoteResult))
+		case "reply-refresh":
+			m.applyReplyRefresh(r.Value.(forum.Page))
 		case "publish":
+			replyTo := m.draft.ThreadID
 			m.draft = forum.Draft{}
 			m.modal = ""
 			m.notice = "已发布"
+			if replyTo > 0 {
+				if m.reading && m.current() != nil && m.current().id == replyTo {
+					return *m, m.refreshAfterReply(), true
+				}
+				return *m, nil, true
+			}
 			if m.reading && m.current() != nil {
 				return *m, m.loadThread(m.current().id, 1, 0), true
 			}

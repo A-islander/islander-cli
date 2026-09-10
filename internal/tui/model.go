@@ -68,6 +68,7 @@ type model struct {
 	listError                                         string
 	busy                                              bool
 	requestID                                         int
+	requestKind                                       string
 	cancel                                            context.CancelFunc
 	editor                                            textarea.Model
 	titleInput                                        textinput.Model
@@ -430,10 +431,14 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.moveSelection(1)
 			case "up", "k":
 				m.moveSelection(-1)
-			case "pgdown", "ctrl+d":
+			case "pgdown":
 				m.moveSelection(m.listPageStep(1))
-			case "pgup", "ctrl+u":
+			case "pgup":
 				m.moveSelection(m.listPageStep(-1))
+			case "ctrl+d":
+				m.moveSelection(m.listRowStep(1, max(1, (m.panelHeight()-4)/2)))
+			case "ctrl+u":
+				m.moveSelection(m.listRowStep(-1, max(1, (m.panelHeight()-4)/2)))
 			case "home", "g":
 				m.moveSelection(-len(m.visible))
 			case "end", "G":
@@ -448,6 +453,12 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "up", "k":
 				m.moveReaderItem(-1)
+				return m, nil
+			case "ctrl+d":
+				m.moveReaderHalf(1)
+				return m, nil
+			case "ctrl+u":
+				m.moveReaderHalf(-1)
 				return m, nil
 			}
 		}

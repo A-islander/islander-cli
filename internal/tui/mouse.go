@@ -101,6 +101,20 @@ func (m model) boardAt(x int) int {
 	}
 	return -1
 }
+
+// Browsing can be replaced while it loads. Writes and identity changes must
+// finish normally, even if their caller has no modal open.
+func (m model) canSwitchBoard() bool {
+	if !m.busy {
+		return true
+	}
+	switch m.requestKind {
+	case "list", "thread", "resume-thread", "pagination", "inline-quote", "reply-refresh":
+		return true
+	}
+	return false
+}
+
 func (m *model) chooseBoard(index int) tea.Cmd {
 	if index < 0 || index >= len(m.boardNames) {
 		return nil
@@ -262,28 +276,13 @@ func (m *model) mouseWheel(w tea.MouseWheelMsg) tea.Cmd {
 	} else if !m.focusMouseReader() {
 		return nil
 	}
-	if pane == readerMousePane {
-		if w.Button == tea.MouseWheelDown {
-			return m.mouseKey('j')
-		}
-		if w.Button == tea.MouseWheelUp {
-			return m.mouseKey('k')
-		}
-		return nil
+	// Both panes use the same cursor navigation as the keyboard, including
+	// page boundaries. Never infer selection from a scrolled viewport.
+	if w.Button == tea.MouseWheelDown {
+		return m.mouseKey('j')
 	}
-	if cmd, handled := m.paginationInput(w); handled {
-		return cmd
-	}
-	if pane == listMousePane {
-		if w.Button == tea.MouseWheelDown {
-			m.moveSelection(1)
-		}
-		if w.Button == tea.MouseWheelUp {
-			m.moveSelection(-1)
-		}
-	} else {
-		m.reader, _ = m.reader.Update(w)
-		m.syncActivePost()
+	if w.Button == tea.MouseWheelUp {
+		return m.mouseKey('k')
 	}
 	return nil
 }

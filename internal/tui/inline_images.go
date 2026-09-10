@@ -502,6 +502,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, c := m.updatePersistent(msg)
 		m, cmd = next.(model), c
 	}
+	m.attachPageAhead()
 	if height := max(1, m.panelHeight()-4); m.reader.Height() != height {
 		m.reader.SetHeight(height)
 		m.refreshReader(false)

@@ -48,7 +48,7 @@ func (m model) readerFloorInput(msg tea.Msg) bool {
 	}
 	switch v := msg.(type) {
 	case tea.KeyPressMsg:
-		return m.reading && (v.String() == "j" || v.String() == "k" || v.String() == "up" || v.String() == "down")
+		return m.reading && (v.String() == "j" || v.String() == "k" || v.String() == "up" || v.String() == "down" || v.String() == "ctrl+u" || v.String() == "ctrl+d")
 	case tea.MouseWheelMsg:
 		return v.Mod == 0 && m.paneAt(v.X, v.Y) == readerMousePane &&
 			(v.Button == tea.MouseWheelUp || v.Button == tea.MouseWheelDown)

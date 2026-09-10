@@ -59,6 +59,10 @@ func (m *model) setListOffset(offset int) {
 }
 
 func (m model) listPageStep(direction int) int {
+	return m.listRowStep(direction, m.panelHeight()-4)
+}
+
+func (m model) listRowStep(direction, rows int) int {
 	index := m.selected
 	if direction < 0 {
 		index--
@@ -66,7 +70,7 @@ func (m model) listPageStep(direction int) int {
 	used, count := 0, 0
 	for index >= 0 && index < len(m.visible) {
 		height := m.listItemHeight(index)
-		if count > 0 && used+height > m.panelHeight()-4 {
+		if count > 0 && used+height > rows {
 			break
 		}
 		used += height

@@ -213,21 +213,21 @@ func (m *model) applyPagination(r paginationResult) {
 	}
 	if len(added) > 0 {
 		if !r.reading {
-			m.moveSelection(r.direction)
+			if r.key == "ctrl+d" || r.key == "ctrl+u" {
+				m.moveSelection(m.listRowStep(r.direction, max(1, (m.panelHeight()-4)/2)))
+			} else {
+				m.moveSelection(r.direction)
+			}
 		} else {
 			switch r.key {
-			case "j", "k", "down", "up":
+			case "j", "k", "down", "up", "wheel":
 				m.moveReaderItem(r.direction)
+			case "ctrl+d", "ctrl+u":
+				m.moveReaderHalf(r.direction)
 			case "n", "p":
 				m.movePost(r.direction)
 			default:
 				amount := m.reader.Height()
-				if r.key == "wheel" {
-					amount = 3
-				}
-				if r.key == "ctrl+d" || r.key == "ctrl+u" {
-					amount = max(1, amount/2)
-				}
 				m.reader.SetYOffset(m.reader.YOffset() + r.direction*amount)
 				m.syncActivePost()
 			}
@@ -320,10 +320,10 @@ func (m *model) paginationInput(msg tea.Msg) (tea.Cmd, bool) {
 		} else {
 			boundary = m.reader.YOffset() <= first.line
 		}
-		if key == "j" || key == "down" {
+		if key == "j" || key == "down" || key == "ctrl+d" || key == "wheel" && dir > 0 {
 			boundary = boundary && m.selectedKey() == last.key
 		}
-		if key == "k" || key == "up" {
+		if key == "k" || key == "up" || key == "ctrl+u" || key == "wheel" && dir < 0 {
 			boundary = boundary && m.selectedKey() == first.key
 		}
 		if key == "n" {
