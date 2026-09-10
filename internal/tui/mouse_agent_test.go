@@ -31,7 +31,6 @@ func TestBracketBoardNavigation(t *testing.T) {
 			key   rune
 			board int
 		}{{']', 1}, {']', 2}, {']', 2}, {'[', 1}, {'[', 0}, {'[', 0}} {
-			m.busy = false
 			m, _ = updateKey(m, step.key, tea.ModCtrl)
 			if m.board != step.board || m.reading || m.filter != "" || m.chatStyle != agent {
 				t.Fatal("board shortcut did not preserve layout and reset navigation")

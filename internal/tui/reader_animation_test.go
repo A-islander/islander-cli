@@ -130,7 +130,7 @@ func TestWheelPagesOnlyAfterSelectingLastFloor(t *testing.T) {
 	// Seeing the bottom may prefetch, but must not skip selecting the last floor.
 	n, cmd := m.Update(tea.MouseWheelMsg{X: m.readerX() + 6, Y: m.readerTop() + 1, Button: tea.MouseWheelDown})
 	m = drainPageCommands(n.(model), cmd)
-	if m.selectedKey() != "111" || m.busy || len(m.current().posts) != 2 || fmt.Sprint(backend.calls) != "[2]" {
+	if m.selectedKey() != "111" || m.busy || len(m.current().posts) != 4 || fmt.Sprint(backend.calls) != "[2]" {
 		t.Fatal("prefetch moved beyond the selected reply")
 	}
 	n, cmd = m.Update(tea.MouseWheelMsg{X: m.readerX() + 6, Y: m.readerTop() + 1, Button: tea.MouseWheelDown})

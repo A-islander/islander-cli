@@ -52,6 +52,7 @@ func (m *model) launch(kind string, fn func(context.Context, forum.Backend) (any
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	m.cancel = cancel
 	m.requestID++
+	m.requestKind = kind
 	id := m.requestID
 	c := m.client
 	m.busy = true
