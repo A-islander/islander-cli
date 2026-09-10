@@ -6,7 +6,7 @@
 
 ## 安装
 
-当前版本为 **v0.0.11**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
+当前版本为 **v0.0.12**。TUI 和 CLI 共用 `islander` 程序，`islander --version` 查看实际版本。
 
 ### 使用 Go 安装
 
@@ -21,7 +21,7 @@ islander tui
 安装指定版本：
 
 ```sh
-go install github.com/A-islander/islander-cli/cmd/islander@v0.0.11
+go install github.com/A-islander/islander-cli/cmd/islander@v0.0.12
 ```
 
 可执行文件安装到 `GOBIN`；未设置时为 `GOPATH/bin`，通常是 `~/go/bin`。如果提示找不到命令，请将实际安装目录加入 `PATH`，例如：
@@ -38,19 +38,19 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | 系统 / 格式 | x86_64 文件名 |
 |---|---|
-| Linux 压缩包 | `islander-v0.0.11-linux-x86_64.tar.gz` |
-| Linux AppImage | `islander-v0.0.11-linux-x86_64.AppImage` |
-| macOS 压缩包 | `islander-v0.0.11-macos-x86_64.tar.gz` |
-| macOS DMG | `islander-v0.0.11-macos-x86_64.dmg` |
-| Windows 压缩包 | `islander-v0.0.11-windows-x86_64.zip` |
-| Windows 可执行文件 | `islander-v0.0.11-windows-x86_64.exe` |
+| Linux 压缩包 | `islander-v0.0.12-linux-x86_64.tar.gz` |
+| Linux AppImage | `islander-v0.0.12-linux-x86_64.AppImage` |
+| macOS 压缩包 | `islander-v0.0.12-macos-x86_64.tar.gz` |
+| macOS DMG | `islander-v0.0.12-macos-x86_64.dmg` |
+| Windows 压缩包 | `islander-v0.0.12-windows-x86_64.zip` |
+| Windows 可执行文件 | `islander-v0.0.12-windows-x86_64.exe` |
 
 ARM64（包括 Apple Silicon）对应文件名中的架构为 `aarch64`。Release 同时提供 `SHA256SUMS`，可在下载目录用 `sha256sum --ignore-missing -c SHA256SUMS` 校验。
 
 Linux 压缩包解压后即可运行：
 
 ```sh
-tar -xzf islander-v0.0.11-linux-x86_64.tar.gz
+tar -xzf islander-v0.0.12-linux-x86_64.tar.gz
 ./islander --version
 ./islander tui
 ```
@@ -58,10 +58,10 @@ tar -xzf islander-v0.0.11-linux-x86_64.tar.gz
 AppImage 在终端中启动；不带参数默认进入 TUI，带参数时转交 CLI：
 
 ```sh
-chmod +x islander-v0.0.11-linux-x86_64.AppImage
-./islander-v0.0.11-linux-x86_64.AppImage
-./islander-v0.0.11-linux-x86_64.AppImage --version
-./islander-v0.0.11-linux-x86_64.AppImage board list
+chmod +x islander-v0.0.12-linux-x86_64.AppImage
+./islander-v0.0.12-linux-x86_64.AppImage
+./islander-v0.0.12-linux-x86_64.AppImage --version
+./islander-v0.0.12-linux-x86_64.AppImage board list
 ```
 
 没有可用 FUSE 时，可加 `--appimage-extract-and-run` 启动。桌面入口使用系统配置的终端；密钥环和外部浏览器仍使用宿主系统服务。
@@ -203,7 +203,7 @@ set -as terminal-features ',xterm-ghostty:extkeys'
 
 顶部常驻 **`m 我的内容`** 按钮，可鼠标点击或按 `m` 打开当前饼干的发串与回复列表。访客会先进入饼干选择，选择／导入后继续打开。页面显示饼干别名；选中回复后按 `Enter` 定位原串，`Esc` 返回原来的列表位置。`[` / `]` 翻页，`i` 切换饼干。
 
-v0.0.11 的串列表与串内浏览均尽量让选中内容保持居中，头尾按边界停靠，上下移动带逐行滚动动画。列表和当前串各自提前请求下一页，缓存命中后直接接续；预取不锁定操作，也不会提前移动光标。网络较慢时仍需等待预取完成，同一页不会重复请求。打开 `b` 板块选择时，光标对齐当前板块。
+v0.0.12 的串列表与串内浏览均尽量让选中内容保持居中，头尾按边界停靠，上下移动带逐行滚动动画。列表和当前串各自提前请求下一页，缓存命中后直接接续；预取不锁定操作，也不会提前移动光标。网络较慢时仍需等待预取完成，同一页不会重复请求。打开 `b` 板块选择时，光标对齐当前板块。
 
 连续浏览到当前页后半段时，会将预取完成的下一页提前接入，保持选中项、页码、展开引用和画面位置。之后跨越原页尾仍按正常规则居中滚动；每次只提前一页，真正到末页时才按底部边界停靠，网络较慢时仍可能等待。
 
@@ -353,20 +353,20 @@ go vet ./...
 本机构建当前架构的压缩包与 AppImage：
 
 ```sh
-make release VERSION=v0.0.11
+make release VERSION=v0.0.12
 ```
 
 需要 Linux、Go、Python 3 和 `desktop-file-validate`。打包脚本下载并校验固定版本的 AppImage 工具与运行时；产物在 `dist/`。仅生成压缩包或交叉编译 ARM64 时：
 
 ```sh
-python3 scripts/package.py --version v0.0.11 --arch aarch64
+python3 scripts/package.py --version v0.0.12 --arch aarch64
 ```
 
 macOS / Windows 也可交叉编译：
 
 ```sh
-python3 scripts/package.py --version v0.0.11 --os macos --arch aarch64
-python3 scripts/package.py --version v0.0.11 --os windows --arch x86_64
+python3 scripts/package.py --version v0.0.12 --os macos --arch aarch64
+python3 scripts/package.py --version v0.0.12 --os windows --arch x86_64
 ```
 
 macOS 本机打包时追加 `--dmg`，生成含 `Islander.app` 的磁盘映像；脚本会校验应用、挂载 DMG，并测试其中的启动器。`macOS DMG` 工作流可为已有 Release 补打 DMG，下载并校验原有 tar.gz 后封装，产物保存在 Actions artifacts 中。

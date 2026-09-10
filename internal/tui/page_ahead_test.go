@@ -21,7 +21,8 @@ func aheadModel(t *testing.T, reading, agent bool) (model, *paginationBackend) {
 		}
 		c.pages[page] = p
 	}
-	m.chatStyle = agent
+	// Decorative command blocks must have stable sizes in navigation fixtures.
+	m.chatStyle, m.agentSeed = agent, 123
 	if reading {
 		m.applyThread(threadResult{Root: *c.pages[1].Root, Page: c.pages[1]})
 	} else {
