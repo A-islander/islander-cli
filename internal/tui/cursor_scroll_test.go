@@ -13,7 +13,20 @@ func TestHalfPageAndWheelFollowSelectedItem(t *testing.T) {
 		for _, agent := range []bool{false, true} {
 			t.Run(fmt.Sprintf("reader=%v/agent=%v", reading, agent), func(t *testing.T) {
 				m, _ := aheadModel(t, reading, agent)
+				// This case exercises short items. Wrapped Agent decorations can
+				// exceed a small viewport and correctly consume wheel input as lines.
+				m.resize(120, 36)
+				if reading {
+					for _, item := range m.readerItems {
+						if item.end-item.line > m.reader.Height() {
+							t.Fatal("short-item fixture exceeds viewport", item.key)
+						}
+					}
+				}
 				aheadSelect(&m, 10)
+				if reading && m.activePost != 10 || !reading && m.selected != 10 {
+					t.Fatal("fixture did not start at the requested item")
+				}
 				before := m.current().id
 				if reading {
 					before = m.current().posts[m.activePost].id
